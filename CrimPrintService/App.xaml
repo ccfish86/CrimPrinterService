@@ -1,0 +1,12 @@
+﻿<Application x:Class="CrimPrintService.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:CrimPrintService"
+             StartupUri="MainWindow.xaml"
+             >
+    <Application.Resources>
+        <local:InverseBoolConverter x:Key="InverseBoolConverter" />
+        <local:BoolRadioConverter x:Key="BoolRadioConverter" />
+        <local:BoolRadioConverter x:Key="InverseBoolRadioConverter" Inverse="True" />
+    </Application.Resources>
+</Application>
