@@ -134,12 +134,14 @@ namespace CrimPrintService
             WsCommand command = JsonConvert.DeserializeObject<WsCommand>(e.Data);
 
             if (command.Command == "print") {
-                string extension = Path.GetExtension(command.Data);
-                if (Regex.IsMatch(extension, @"(jpg|jpeg|png|jfif)", RegexOptions.IgnoreCase)) {
-                    printImage(command.Seq, command.Data);
-                } else if (Regex.IsMatch(extension, @"(html|html)", RegexOptions.IgnoreCase))
-                {
-                    printHtml(command.Seq, command.Data);
+                lock(this) {
+                    string extension = Path.GetExtension(command.Data);
+                    if (Regex.IsMatch(extension, @"(jpg|jpeg|png|jfif)", RegexOptions.IgnoreCase)) {
+                        printImage(command.Seq, command.Data);
+                    } else if (Regex.IsMatch(extension, @"(html|html)", RegexOptions.IgnoreCase))
+                    {
+                        printHtml(command.Seq, command.Data);
+                    }
                 }
             }
         }
@@ -185,8 +187,8 @@ namespace CrimPrintService
                 {
                     case "1":
                         {
-                            w = 300;
-                            h = 511;
+                            w = 300; // 285; // 300* 0.95
+                            h = 511; // 485; // 511 * 0.95
                             break;
                         }
 
@@ -215,7 +217,8 @@ namespace CrimPrintService
 
                 if (PrintSetting.AutoSize)
                 {
-                    e.MarginBounds
+                    // e.MarginBounds
+                    Console.WriteLine(e.MarginBounds);
                     Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
                     e.Graphics.DrawImage(img, rect);
                 } else
