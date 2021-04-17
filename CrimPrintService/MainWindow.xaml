@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CrimPrintService"
         mc:Ignorable="d"
-        Title="服务配置" Height="350" Width="525">
+        Title="犯罪大师-云打印-服务配置" Height="350" Width="525" Loaded="Window_Loaded">
     <StackPanel VerticalAlignment="Top" Width="500" Height="350" Orientation="Vertical">
     <Grid x:Name="mainGrid" Margin="0 20 0 0">
             <Grid.Resources>
@@ -27,7 +27,7 @@
             <ColumnDefinition Width="100" ></ColumnDefinition>
             <ColumnDefinition Width="200*"></ColumnDefinition>
         </Grid.ColumnDefinitions>
-
+        
         <TextBox x:Name="textBoxPort" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="100" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=Port}"/>
 
         <ComboBox x:Name="combBoxPrinter"  Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left"
@@ -42,13 +42,13 @@
 
         <StackPanel VerticalAlignment="Center"  Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
             <Label>上</Label>
-            <TextBox x:Name="textBoxMTop" HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" Width="40" Text="{Binding Mode=TwoWay,Path=MarginTop}"/>
-            <Label>下</Label>
+                <TextBox x:Name="textBoxMTop" HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" Width="40" Text="{Binding Mode=TwoWay,Path=MarginTop}"/>
+                <Label>右</Label>
+                <TextBox x:Name="textBoxMRight" HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" Width="40" Text="{Binding Mode=TwoWay,Path=MarginRight}"/>
+                <Label>下</Label>
             <TextBox x:Name="textBoxMBottom" HorizontalAlignment="Left" Height="23"  VerticalAlignment="Center" Width="40" Text="{Binding Mode=TwoWay,Path=MarginBottom}"/>
             <Label>左</Label>
             <TextBox x:Name="textBoxMLeft" HorizontalAlignment="Left" Height="23"  VerticalAlignment="Center" Width="40" Text="{Binding Mode=TwoWay,Path=MarginLeft}"/>
-            <Label>右</Label>
-            <TextBox x:Name="textBoxMRight" HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" Width="40" Text="{Binding Mode=TwoWay,Path=MarginRight}"/>
         </StackPanel>
 
 

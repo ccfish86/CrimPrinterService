@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.IO;
 using System.Drawing;
 using System.Net;
+using log4net;
 
 namespace CrimPrintService
 {
@@ -18,40 +19,35 @@ namespace CrimPrintService
     /// </summary>
     public partial class MainWindow : Window
     {
-        public static readonly DependencyProperty dpSetting = DependencyProperty.
-           Register("Setting", typeof(CustomSetting), typeof(MainWindow));
 
         public MainWindow()
         {
             InitializeComponent();
 
 
-            AfterInit();
-
-            this.getPrinters();
-
-            this.mainGrid.DataContext = Setting;
-
         }
 
         private void AfterInit()
         {
             _setting = loadSetting();
-            _setting.Port = 9999;
-            _setting.MarginTop = 0;
-            _setting.MarginLeft = 0;
-            _setting.Landscape = false;
-            _setting.Paper = "1";
-            _setting.Started = false;
         }
 
         private CustomSetting loadSetting()
         {
+            Logger.InfoLog("load settings");
             if (File.Exists("setting.json")) {
                 string str = File.ReadAllText("setting.json");
                 return JsonConvert.DeserializeObject<CustomSetting>(str);
             }
-            return new CustomSetting();
+
+            var config = new CustomSetting();
+            config.Port = 9999;
+            config.MarginTop = 0;
+            config.MarginLeft = 0;
+            config.Landscape = false;
+            config.Paper = "1";
+            config.Started = false;
+            return config;
         }
 
         public int Port
@@ -63,7 +59,7 @@ namespace CrimPrintService
         private void getPrinters()
         {
             PrintDocument printDocument = new PrintDocument();
-            // printDocument.printDocument.; ;
+
             PrinterSettings.StringCollection printers = PrinterSettings.InstalledPrinters;
             List<string> result = new List<string>();
             foreach (string item in printers)
@@ -71,8 +67,9 @@ namespace CrimPrintService
                 result.Add(item);
                 Console.WriteLine(item);
             }
-
-            Setting.Printer = printDocument.PrinterSettings.PrinterName;
+            if (Setting.Printer == null) { 
+                Setting.Printer = printDocument.PrinterSettings.PrinterName;
+            }
 
             this.combBoxPrinter.ItemsSource = result;
         }
@@ -90,8 +87,6 @@ namespace CrimPrintService
         }
         private void button_Click(object sender, RoutedEventArgs e)
         {
-            Console.WriteLine(this._setting.Port);
-            Console.WriteLine(this.Port);
             String config = JsonConvert.SerializeObject(Setting);
             File.WriteAllText("setting.json", config);
         }
@@ -100,18 +95,26 @@ namespace CrimPrintService
         {
 
             // 启动服务
-            wssv = new WebSocketServer("ws://0.0.0.0:" + Setting.Port);
-            wssv.AddWebSocketService<Laputa>("/Laputa",(Laputa laputa) => {
-                laputa.PrintSetting = Setting;
-            });
+            this.StartServer();
+        }
+        void StartServer()
+        {
+
+            // 启动服务
             try
             {
+                Console.WriteLine("server start");
+                wssv = new WebSocketServer("ws://0.0.0.0:" + Math.Min(Setting.Port, 65535));
+                wssv.AddWebSocketService<Laputa>("/Laputa", (Laputa laputa) => {
+                    laputa.PrintSetting = Setting;
+                });
                 Setting.Started = true;
                 Console.WriteLine("server start");
                 wssv.Start();
             }
             catch (InvalidOperationException ex)
             {
+                Logger.ErrorLog("启动失败");
                 Setting.Started = false;
                 MessageBox.Show("启动失败！");
             }
@@ -125,6 +128,18 @@ namespace CrimPrintService
                 wssv.Stop();
             }
         }
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            AfterInit();
+
+            this.getPrinters();
+
+            this.mainGrid.DataContext = Setting;
+
+            // 启动服务
+            this.StartServer();
+        }
     }
 
     public class Laputa : WebSocketBehavior
@@ -134,6 +149,7 @@ namespace CrimPrintService
             WsCommand command = JsonConvert.DeserializeObject<WsCommand>(e.Data);
 
             if (command.Command == "print") {
+                Logger.InfoLog("print " + command.Seq + "  data:" + command.Data);
                 lock(this) {
                     string extension = Path.GetExtension(command.Data);
                     if (Regex.IsMatch(extension, @"(jpg|jpeg|png|jfif)", RegexOptions.IgnoreCase)) {
@@ -161,13 +177,16 @@ namespace CrimPrintService
             printDoc.PrintController = printController;
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
+                Logger.InfoLog("print begin" + seq + "  data:" + image);
                 WsResponse br = new WsResponse();
                 br.Seq = seq;
                 br.Data = "begin";
                 Send(JsonConvert.SerializeObject(br));
+
             };
             printDoc.EndPrint += (object sender, PrintEventArgs e) =>
             {
+                Logger.InfoLog("print end " + seq + "  data:" + image);
                 WsResponse er = new WsResponse();
                 er.Seq = seq;
                 er.Data = "end";
@@ -225,7 +244,9 @@ namespace CrimPrintService
                 {
                     e.Graphics.DrawImage(img, x, y, w, h);
                 }
+
                 e.HasMorePages = false;
+                Logger.InfoLog("print printed" + seq + "  data:" + image);
             };
             printDoc.Print();
 
