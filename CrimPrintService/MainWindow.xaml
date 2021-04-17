@@ -35,7 +35,7 @@
         <ComboBox x:Name="combBoxPaper"  Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Height="23" Width="180" 
                   SelectedValuePath="Tag" 
                   SelectedValue="{Binding Mode=TwoWay,Path=Paper}" >
-            <ComboBoxItem Content="极兔速递 70x130" Tag="1" />
+            <ComboBoxItem Content="极兔速递 76x130" Tag="1" />
             <ComboBoxItem Content="邮政 100x180" Tag="2"/>
             <ComboBoxItem Content="其他 100x150" Tag="3"/>
         </ComboBox>

@@ -176,14 +176,17 @@ namespace CrimPrintService
                 // inch
                 int x = toInchX100(PrintSetting.MarginLeft);
                 int y = toInchX100(PrintSetting.MarginTop);
+                // inch
+                int xr = toInchX100(PrintSetting.MarginRight);
+                int yb = toInchX100(PrintSetting.MarginBottom);
 
-                int w = 276, h = 551;
+                int w = 300, h = 551;
                 switch(PrintSetting.Paper)
                 {
                     case "1":
                         {
-                            w = 276;
-                            h = 551;
+                            w = 300;
+                            h = 511;
                             break;
                         }
 
@@ -207,9 +210,14 @@ namespace CrimPrintService
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image);
                 WebResponse response = request.GetResponse();//获得响应
                 Image img = Image.FromStream(response.GetResponseStream());///实例化,得到img
+                //                Conole.wrimg.Width       img.Height
+                Console.WriteLine(img.Width + "x" + img.Height);
+
                 if (PrintSetting.AutoSize)
                 {
-                    e.Graphics.DrawImage(img, e.MarginBounds);
+                    e.MarginBounds
+                    Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
+                    e.Graphics.DrawImage(img, rect);
                 } else
                 {
                     e.Graphics.DrawImage(img, x, y, w, h);
