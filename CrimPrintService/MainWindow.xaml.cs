@@ -151,12 +151,43 @@ namespace CrimPrintService
             if (command.Command == "print") {
                 Logger.InfoLog("print " + command.Seq + "  data:" + command.Data);
                 lock(this) {
-                    string extension = Path.GetExtension(command.Data);
-                    if (Regex.IsMatch(extension, @"(jpg|jpeg|png|jfif)", RegexOptions.IgnoreCase)) {
-                        printImage(command.Seq, command.Data);
-                    } else if (Regex.IsMatch(extension, @"(html|html)", RegexOptions.IgnoreCase))
+                    if (command.Type == "image")
                     {
-                        printHtml(command.Seq, command.Data);
+                        if (command.Data.StartsWith("["))
+                        {
+                            // 多个图片
+                            List<KeyValuePair<string, string>> imageList = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(command.Data);
+                            printImage(command.Seq, imageList);
+
+                        }
+                        else
+                        {
+                            printImage(command.Seq, command.Data);
+                        }
+                    }
+                    else if (command.Type == "html")
+                    {
+                        if (command.Data.StartsWith("["))
+                        {
+
+                            // 多个html
+                            List<KeyValuePair < string, string>> htmlList = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(command.Data);
+
+                        }
+                        else
+                        {
+                            printHtml(command.Seq, command.Data);
+                        }
+                    }
+                    else
+                    { 
+                        string extension = Path.GetExtension(command.Data);
+                        if (Regex.IsMatch(extension, @"(jpg|jpeg|png|jfif)", RegexOptions.IgnoreCase)) {
+                            printImage(command.Seq, command.Data);
+                        } else if (Regex.IsMatch(extension, @"(html|html)", RegexOptions.IgnoreCase))
+                        {
+                            printHtml(command.Seq, command.Data);
+                        }
                     }
                 }
             }
@@ -166,9 +197,9 @@ namespace CrimPrintService
         {
             get;set;
         }
-
-        protected void printImage(string seq, string image)
+        protected void printImage(string seq, List<KeyValuePair<string, string>> imageList)
         {
+
             PrintController printController = new StandardPrintController();
             PrintDocument printDoc = new PrintDocument();
             printDoc.DefaultPageSettings.Landscape = PrintSetting.Landscape;
@@ -177,8 +208,8 @@ namespace CrimPrintService
             printDoc.PrintController = printController;
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
-                Logger.InfoLog("print begin" + seq + "  data:" + image);
-                WsResponse br = new WsResponse();
+                Logger.InfoLog("print begin" + seq );
+                WsResponse<string> br = new WsResponse<string>();
                 br.Seq = seq;
                 br.Data = "begin";
                 Send(JsonConvert.SerializeObject(br));
@@ -186,8 +217,8 @@ namespace CrimPrintService
             };
             printDoc.EndPrint += (object sender, PrintEventArgs e) =>
             {
-                Logger.InfoLog("print end " + seq + "  data:" + image);
-                WsResponse er = new WsResponse();
+                Logger.InfoLog("print end " + seq);
+                WsResponse<string> er = new WsResponse<string>();
                 er.Seq = seq;
                 er.Data = "end";
                 Send(JsonConvert.SerializeObject(er));
@@ -202,7 +233,7 @@ namespace CrimPrintService
                 int yb = toInchX100(PrintSetting.MarginBottom);
 
                 int w = 300, h = 551;
-                switch(PrintSetting.Paper)
+                switch (PrintSetting.Paper)
                 {
                     case "1":
                         {
@@ -227,34 +258,49 @@ namespace CrimPrintService
                 }
 
                 printDoc.DefaultPageSettings.PaperSize = new PaperSize("自定义", w, h);//inch
-                // Image i = Image.FromFile(image);
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image);
-                WebResponse response = request.GetResponse();//获得响应
-                Image img = Image.FromStream(response.GetResponseStream());///实例化,得到img
-                //                Conole.wrimg.Width       img.Height
-                Console.WriteLine(img.Width + "x" + img.Height);
 
-                if (PrintSetting.AutoSize)
-                {
-                    // e.MarginBounds
-                    Console.WriteLine(e.MarginBounds);
-                    Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
-                    e.Graphics.DrawImage(img, rect);
-                } else
-                {
-                    e.Graphics.DrawImage(img, x, y, w, h);
+                foreach (KeyValuePair <string, string > image in imageList) { 
+                    // Image i = Image.FromFile(image);
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image.Value);
+                    WebResponse response = request.GetResponse();//获得响应
+                    Image img = Image.FromStream(response.GetResponseStream());///实例化,得到img
+                    //                Conole.wrimg.Width       img.Height
+                    Console.WriteLine(img.Width + "x" + img.Height);
+
+                    if (PrintSetting.AutoSize)
+                    {
+                        // e.MarginBounds
+                        Console.WriteLine(e.MarginBounds);
+                        Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
+                        e.Graphics.DrawImage(img, rect);
+                    }
+                    else
+                    {
+                        e.Graphics.DrawImage(img, x, y, w, h);
+                    }
+                    Logger.InfoLog("print printed" + image.Key + "  data:" + image.Value);
+
+                    WsResponse<KeyValuePair<string,string>> rimage = new WsResponse<KeyValuePair<string, string>>();
+                    rimage.Seq = seq;
+                    rimage.Data = new KeyValuePair<string, string>(image.Key, "printed");
+                    string msgImage = JsonConvert.SerializeObject(rimage);
+                    Send(msgImage);
                 }
-
                 e.HasMorePages = false;
-                Logger.InfoLog("print printed" + seq + "  data:" + image);
             };
             printDoc.Print();
-
-            WsResponse r = new WsResponse();
+            
+            WsResponse<string> r = new WsResponse<string>();
             r.Seq = seq;
             r.Data = "printed";
             string msg = JsonConvert.SerializeObject(r);
             Send(msg);
+        }
+        protected void printImage(string seq, string image)
+        { 
+            List<KeyValuePair<string, string>> imageList = new List<KeyValuePair<string, string>>();
+            imageList.Add(new KeyValuePair<string, string>(seq, image));
+            printImage(seq, imageList);
         }
 
         int toInchX100(int mm)
@@ -265,7 +311,7 @@ namespace CrimPrintService
         protected void printHtml(string seq, string html)
         {
 
-            WsResponse r = new WsResponse();
+            WsResponse<string> r = new WsResponse<string>();
             r.Seq = seq;
             r.Data = "暂不支持HTML";
             string msg = JsonConvert.SerializeObject(r);
@@ -275,17 +321,17 @@ namespace CrimPrintService
         protected override void OnOpen()
         {
             Console.WriteLine("opened");
-            WsResponse r = new WsResponse();
+            WsResponse<string> r = new WsResponse<string>();
             r.Data = "连接成功";
             string msg = JsonConvert.SerializeObject(r);
             Send(msg);
         }
     }
 
-    public class WsResponse
+    public class WsResponse<T>
     {
         public string Seq { get; set; }
-        public string Data
+        public T Data
         {
             get;
             set;
@@ -302,6 +348,8 @@ namespace CrimPrintService
         }
 
         public string Seq { get; set; }
+
+        public string Type { get; set; }
 
         public string Data {
             get;
