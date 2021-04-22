@@ -10,7 +10,6 @@ using System.Text.RegularExpressions;
 using System.IO;
 using System.Drawing;
 using System.Net;
-using log4net;
 
 namespace CrimPrintService
 {
@@ -205,6 +204,10 @@ namespace CrimPrintService
             printDoc.DefaultPageSettings.Landscape = PrintSetting.Landscape;
             printDoc.PrinterSettings.PrinterName = PrintSetting.Printer;
             printDoc.PrinterSettings.Copies = 1;
+            if (!String.IsNullOrEmpty(seq)) { 
+                printDoc.PrinterSettings.PrintFileName = seq;
+            }
+            // printDoc.OriginAtMargins = true;
             printDoc.PrintController = printController;
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
@@ -213,8 +216,8 @@ namespace CrimPrintService
                 br.Seq = seq;
                 br.Data = "begin";
                 Send(JsonConvert.SerializeObject(br));
-
             };
+
             printDoc.EndPrint += (object sender, PrintEventArgs e) =>
             {
                 Logger.InfoLog("print end " + seq);
@@ -223,6 +226,8 @@ namespace CrimPrintService
                 er.Data = "end";
                 Send(JsonConvert.SerializeObject(er));
             };
+            int page = 1;
+
             printDoc.PrintPage += (object sender, PrintPageEventArgs e) =>
             {
                 // inch
@@ -231,7 +236,7 @@ namespace CrimPrintService
                 // inch
                 int xr = toInchX100(PrintSetting.MarginRight);
                 int yb = toInchX100(PrintSetting.MarginBottom);
-
+                
                 int w = 300, h = 551;
                 switch (PrintSetting.Paper)
                 {
@@ -256,27 +261,37 @@ namespace CrimPrintService
                         }
                         break;
                 }
+                e.PageSettings.Margins.Left = 0;
+                e.PageSettings.Margins.Top = 0;
+                e.PageSettings.Margins.Bottom = 0;
+                e.PageSettings.Margins.Right = 0;
+                e.PageSettings.PaperSize = new PaperSize("自定义", w, h);
 
-                printDoc.DefaultPageSettings.PaperSize = new PaperSize("自定义", w, h);//inch
+                //foreach (KeyValuePair<string, string> image in imageList)
+                //{
 
-                foreach (KeyValuePair <string, string > image in imageList) { 
+                KeyValuePair<string, string> image = imageList[page - 1];
                     // Image i = Image.FromFile(image);
                     HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image.Value);
                     WebResponse response = request.GetResponse();//获得响应
                     Image img = Image.FromStream(response.GetResponseStream());///实例化,得到img
                     //                Conole.wrimg.Width       img.Height
                     Console.WriteLine(img.Width + "x" + img.Height);
+                    Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
 
                     if (PrintSetting.AutoSize)
                     {
                         // e.MarginBounds
-                        Console.WriteLine(e.MarginBounds);
-                        Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
-                        e.Graphics.DrawImage(img, rect);
+                        e.MarginBounds.Offset(0, 0);
+                        //Console.WriteLine(e.MarginBounds);
+                        //Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
+                        //e.Graphics.DrawImage(img, rect);
+                        e.Graphics.DrawImage(img, e.MarginBounds);
                     }
                     else
                     {
-                        e.Graphics.DrawImage(img, x, y, w, h);
+                        e.MarginBounds.Offset(0, 0);
+                        e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
                     }
                     Logger.InfoLog("print printed" + image.Key + "  data:" + image.Value);
 
@@ -285,9 +300,20 @@ namespace CrimPrintService
                     rimage.Data = new KeyValuePair<string, string>(image.Key, "printed");
                     string msgImage = JsonConvert.SerializeObject(rimage);
                     Send(msgImage);
+      
+                //}
+
+                if (page < imageList.Count)
+                {
+                    e.HasMorePages = true;
                 }
-                e.HasMorePages = false;
+                else
+                {
+                    e.HasMorePages = false;
+                }
+                page++;
             };
+
             printDoc.Print();
             
             WsResponse<string> r = new WsResponse<string>();
