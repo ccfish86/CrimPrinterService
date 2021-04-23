@@ -8,5 +8,6 @@
         <local:InverseBoolConverter x:Key="InverseBoolConverter" />
         <local:BoolRadioConverter x:Key="BoolRadioConverter" />
         <local:BoolRadioConverter x:Key="InverseBoolRadioConverter" Inverse="True" />
+        <local:BoolToVisibilityConvert x:Key="BoolToVisibilityConvert" />
     </Application.Resources>
 </Application>

@@ -1,0 +1,4 @@
+// 单个打印
+{"Command":"print", "Seq": 111, "Data":  "http://XXXXXXXXX/96.jpg"}
+// 多单批量打印
+{"Command":"print", "Seq": "111", "Type": "image", "Data":  "[{\"Key\":\"111\",\"Value\":\"http://XXXXXXXXX/96.jpg\"}, {\"Key\":\"222\",\"Value\":\"http://XXXXXXXXX/97.jpg\"}]"}

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
@@ -17,8 +18,6 @@ namespace CrimPrintService
             set;
         }
 
-        string _paper;
-
         public event PropertyChangedEventHandler PropertyChanged;
         public void NotifyPropertyChanged(string propertyName)
         {
@@ -27,48 +26,7 @@ namespace CrimPrintService
                 PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
             }
         }
-        public string Paper {
-            get
-            {
-                return _paper;
-            }
-            set
-            {
-                Console.WriteLine("change pager" + value);
-                _paper = value;
-            }
-        }
-        public string Printer {
-            get;
-            set;
-        }
-
-        public int MarginRight
-        {
-            get;
-            set;
-        }
-        public int MarginTop
-        {
-            get;
-            set;
-        }
-
-        public int MarginBottom
-        {
-            get;
-            set;
-        }
-
-
-
-        public int MarginLeft
-        {
-            get;
-            set;
-        }
-
-        public bool AutoSize { get; set; }
+       
 
         public bool Started
         {
@@ -83,10 +41,13 @@ namespace CrimPrintService
             }
         }
 
-        public bool Landscape
-        {
-            get;set;
+        public string SelectedID { get; set; }
+
+        public ObservableCollection<PrinterSetting> Printers {
+            get;
+            set;
         }
+
         private bool _started;
         //public static readonly DependencyProperty StartedProperty = DependencyProperty.Register("Started", typeof(bool), typeof(MainWindow));
         //public bool Started
