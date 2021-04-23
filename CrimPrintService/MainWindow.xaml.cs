@@ -147,7 +147,9 @@ namespace CrimPrintService
         {
             WsCommand command = JsonConvert.DeserializeObject<WsCommand>(e.Data);
 
-            if (command.Command == "print") {
+            if (command.Command == "print")
+            {
+                #region print
                 Logger.InfoLog("print " + command.Seq + "  data:" + command.Data);
                 lock(this) {
                     if (command.Type == "image")
@@ -156,12 +158,12 @@ namespace CrimPrintService
                         {
                             // 多个图片
                             List<KeyValuePair<string, string>> imageList = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(command.Data);
-                            printImage(command.Seq, imageList);
+                            printImage(command.Seq, command.Printer, imageList);
 
                         }
                         else
                         {
-                            printImage(command.Seq, command.Data);
+                            printImage(command.Seq, command.Printer, command.Data);
                         }
                     }
                     else if (command.Type == "html")
@@ -182,13 +184,30 @@ namespace CrimPrintService
                     { 
                         string extension = Path.GetExtension(command.Data);
                         if (Regex.IsMatch(extension, @"(jpg|jpeg|png|jfif)", RegexOptions.IgnoreCase)) {
-                            printImage(command.Seq, command.Data);
+                            printImage(command.Seq, command.Printer, command.Data);
                         } else if (Regex.IsMatch(extension, @"(html|html)", RegexOptions.IgnoreCase))
                         {
                             printHtml(command.Seq, command.Data);
                         }
                     }
                 }
+
+                #endregion
+            }
+            else if (command.Command == "getPrinters")
+            {
+                #region getPriters
+                PrinterSettings.StringCollection printers = PrinterSettings.InstalledPrinters;
+                List<string> result = new List<string>();
+                foreach (string item in printers)
+                {
+                    result.Add(item);
+                }
+                WsResponse<List<string>> er = new WsResponse<List<string>>();
+                er.Seq = command.Seq;
+                er.Data = result;
+                Send(JsonConvert.SerializeObject(er));
+                #endregion
             }
         }
 
@@ -196,19 +215,26 @@ namespace CrimPrintService
         {
             get;set;
         }
-        protected void printImage(string seq, List<KeyValuePair<string, string>> imageList)
+        /// <summary>
+        /// 打印
+        /// </summary>
+        /// <param name="seq">序号，用于区分回调</param>
+        /// <param name="printerName">打印机，如果不指定，则使用画面上的打印机</param>
+        /// <param name="imageList">待打印图片列表</param>
+        protected void printImage(string seq, string printerName, List<KeyValuePair<string, string>> imageList)
         {
-
+            // 设置打印时不再弹打印进度弹窗
             PrintController printController = new StandardPrintController();
             PrintDocument printDoc = new PrintDocument();
             printDoc.DefaultPageSettings.Landscape = PrintSetting.Landscape;
-            printDoc.PrinterSettings.PrinterName = PrintSetting.Printer;
+            printDoc.PrinterSettings.PrinterName = String.IsNullOrEmpty(printerName)? PrintSetting.Printer: printerName;
             printDoc.PrinterSettings.Copies = 1;
-            if (!String.IsNullOrEmpty(seq)) { 
-                printDoc.PrinterSettings.PrintFileName = seq;
-            }
+            //if (!String.IsNullOrEmpty(seq)) { 
+            //    printDoc.PrinterSettings.PrintFileName = seq;
+            //}
             // printDoc.OriginAtMargins = true;
             printDoc.PrintController = printController;
+            // 开始打印事件
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
                 Logger.InfoLog("print begin" + seq );
@@ -218,6 +244,7 @@ namespace CrimPrintService
                 Send(JsonConvert.SerializeObject(br));
             };
 
+            // 结束打印事件
             printDoc.EndPrint += (object sender, PrintEventArgs e) =>
             {
                 Logger.InfoLog("print end " + seq);
@@ -226,8 +253,9 @@ namespace CrimPrintService
                 er.Data = "end";
                 Send(JsonConvert.SerializeObject(er));
             };
-            int page = 1;
 
+            int page = 1;
+            // 打印，每一页执行一次该事件
             printDoc.PrintPage += (object sender, PrintPageEventArgs e) =>
             {
                 // inch
@@ -271,40 +299,55 @@ namespace CrimPrintService
                 //{
 
                 KeyValuePair<string, string> image = imageList[page - 1];
-                    // Image i = Image.FromFile(image);
-                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image.Value);
-                    WebResponse response = request.GetResponse();//获得响应
-                    Image img = Image.FromStream(response.GetResponseStream());///实例化,得到img
-                    //                Conole.wrimg.Width       img.Height
-                    Console.WriteLine(img.Width + "x" + img.Height);
-                    Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
-
-                    if (PrintSetting.AutoSize)
+                // Image i = Image.FromFile(image);
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image.Value);
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse()) //获得响应) 
+                {
+                    if (response.StatusCode != HttpStatusCode.OK)
                     {
-                        // e.MarginBounds
-                        e.MarginBounds.Offset(0, 0);
-                        //Console.WriteLine(e.MarginBounds);
-                        //Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
-                        //e.Graphics.DrawImage(img, rect);
-                        e.Graphics.DrawImage(img, e.MarginBounds);
-                    }
-                    else
-                    {
-                        e.MarginBounds.Offset(0, 0);
-                        e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
-                    }
-                    Logger.InfoLog("print printed" + image.Key + "  data:" + image.Value);
 
-                    WsResponse<KeyValuePair<string,string>> rimage = new WsResponse<KeyValuePair<string, string>>();
-                    rimage.Seq = seq;
-                    rimage.Data = new KeyValuePair<string, string>(image.Key, "printed");
-                    string msgImage = JsonConvert.SerializeObject(rimage);
-                    Send(msgImage);
-      
+                        WsResponse<KeyValuePair<string, string>> rerr = new WsResponse<KeyValuePair<string, string>>();
+                        rerr.Seq = seq;
+                        rerr.Data = new KeyValuePair<string, string>(image.Key, "error:" + response.StatusCode);
+                        string msgerr = JsonConvert.SerializeObject(rerr);
+                        Send(msgerr);
+                    } else {
+                        using (Stream stream = response.GetResponseStream())
+                        { 
+                            Image img = Image.FromStream(stream);///实例化,得到img
+                            //                Conole.wrimg.Width       img.Height
+                            Console.WriteLine(img.Width + "x" + img.Height);
+                            Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
+
+                            if (PrintSetting.AutoSize)
+                            {
+                                // e.MarginBounds
+                                e.MarginBounds.Offset(0, 0);
+                                //Console.WriteLine(e.MarginBounds);
+                                //Rectangle rect = new Rectangle(x, y, w - x - xr, h - y - yb);
+                                //e.Graphics.DrawImage(img, rect);
+                                e.Graphics.DrawImage(img, e.MarginBounds);
+                            }
+                            else
+                            {
+                                e.MarginBounds.Offset(0, 0);
+                                e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
+                            }
+                        }
+                        Logger.InfoLog("print printed" + image.Key + "  data:" + image.Value);
+
+                        WsResponse<KeyValuePair<string, string>> rimage = new WsResponse<KeyValuePair<string, string>>();
+                        rimage.Seq = seq;
+                        rimage.Data = new KeyValuePair<string, string>(image.Key, "printed");
+                        string msgImage = JsonConvert.SerializeObject(rimage);
+                        Send(msgImage);
+                    }
+                }
                 //}
 
                 if (page < imageList.Count)
                 {
+                    // 表示还有下一页，
                     e.HasMorePages = true;
                 }
                 else
@@ -322,11 +365,11 @@ namespace CrimPrintService
             string msg = JsonConvert.SerializeObject(r);
             Send(msg);
         }
-        protected void printImage(string seq, string image)
+        protected void printImage(string seq, string printerName, string image)
         { 
             List<KeyValuePair<string, string>> imageList = new List<KeyValuePair<string, string>>();
             imageList.Add(new KeyValuePair<string, string>(seq, image));
-            printImage(seq, imageList);
+            printImage(seq, printerName, imageList);
         }
 
         int toInchX100(int mm)
@@ -371,6 +414,11 @@ namespace CrimPrintService
         {
             get;
             set;
+        }
+
+        public string Printer
+        {
+            get;set;
         }
 
         public string Seq { get; set; }
