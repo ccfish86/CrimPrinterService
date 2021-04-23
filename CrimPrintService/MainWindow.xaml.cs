@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.IO;
 using System.Drawing;
 using System.Net;
+using System.Collections.ObjectModel;
 
 namespace CrimPrintService
 {
@@ -41,10 +42,10 @@ namespace CrimPrintService
 
             var config = new CustomSetting();
             config.Port = 9999;
-            config.MarginTop = 0;
-            config.MarginLeft = 0;
-            config.Landscape = false;
-            config.Paper = "1";
+            // config.MarginTop = 0;
+            // config.MarginLeft = 0;
+            // config.Landscape = false;
+            // config.Paper = "1";
             config.Started = false;
             return config;
         }
@@ -66,8 +67,22 @@ namespace CrimPrintService
                 result.Add(item);
                 Console.WriteLine(item);
             }
-            if (Setting.Printer == null) { 
-                Setting.Printer = printDocument.PrinterSettings.PrinterName;
+            if (Setting.Printers == null || Setting.Printers.Count == 0) {
+                if (Setting.Printers == null)
+                {
+                    Setting.Printers = new ObservableCollection<PrinterSetting>();
+                }
+                // Setting.Printer = printDocument.PrinterSettings.PrinterName;
+                // 配置默认打印机
+                PrinterSetting p = new PrinterSetting();
+                p.ID = "default";
+                p.Printer = printDocument.PrinterSettings.PrinterName;
+                p.MarginTop = 0;
+                p.MarginLeft = 0;
+                p.Landscape = false;
+                p.Paper = "1";
+
+                Setting.Printers.Add(p);
             }
 
             this.combBoxPrinter.ItemsSource = result;
@@ -108,7 +123,7 @@ namespace CrimPrintService
                     laputa.PrintSetting = Setting;
                 });
                 Setting.Started = true;
-                Console.WriteLine("server start");
+                Console.WriteLine("server started");
                 wssv.Start();
             }
             catch (InvalidOperationException ex)
@@ -134,10 +149,72 @@ namespace CrimPrintService
 
             this.getPrinters();
 
-            this.mainGrid.DataContext = Setting;
+            this.StackPanelMain.DataContext = Setting;
 
             // 启动服务
             this.StartServer();
+        }
+
+        private void listBoxPrinters_Selected(object sender, RoutedEventArgs e)
+        {
+            Console.WriteLine(e.Source);
+        }
+
+        private void buttonAdd_Click(object sender, RoutedEventArgs e)
+        {
+            // 添加打印机
+            PrinterSetting p = new PrinterSetting();
+            p.ID = "new";
+            p.MarginTop = 0;
+            p.MarginLeft = 0;
+            p.Landscape = false;
+            p.Paper = "1";
+            Setting.Printers.Add(p);
+            
+            Setting.SelectedID = "new";
+        }
+
+        private void buttonDel_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (PrinterSetting p in Setting.Printers)
+            {
+                if (p.ID == Setting.SelectedID)
+                {
+                    Setting.Printers.Remove(p);
+                    break;
+                }
+            }
+        }
+
+        private void MenuItem_Click(object sender, RoutedEventArgs e)
+        {
+
+            if (listBoxPrinters.SelectedIndex == -1)
+            {
+                return;
+            }
+            foreach (PrinterSetting p in Setting.Printers)
+            {
+                if (listBoxPrinters.SelectedItem == p)
+                {
+                    p.IsDefault = true;
+                } else
+                {
+                    p.IsDefault = false;
+                }
+            }
+        }
+
+        private void menuItemDel_Checked(object sender, RoutedEventArgs e)
+        {
+
+            if (listBoxPrinters.SelectedIndex == -1)
+            {
+                return;
+            }
+            Setting.Printers.RemoveAt(listBoxPrinters.SelectedIndex);
+
+            Console.WriteLine(listBoxPrinters.SelectedIndex);
         }
     }
 
@@ -196,16 +273,51 @@ namespace CrimPrintService
             }
             else if (command.Command == "getPrinters")
             {
-                #region getPriters
+                #region getPriters 打印机列表
                 PrinterSettings.StringCollection printers = PrinterSettings.InstalledPrinters;
                 List<string> result = new List<string>();
                 foreach (string item in printers)
                 {
                     result.Add(item);
                 }
-                WsResponse<List<string>> er = new WsResponse<List<string>>();
+                WsResponse<List<string>> chkr = new WsResponse<List<string>>();
+                chkr.Seq = command.Seq;
+                chkr.Data = result;
+                Send(JsonConvert.SerializeObject(chkr));
+                #endregion
+            }
+            else if (command.Command == "checkPrinter")
+            {
+                #region checkPrinter 查看打印机是否正常开启
+                PrinterSettings.StringCollection printers = PrinterSettings.InstalledPrinters;
+                bool hasThePrinter = false;
+                foreach (string item in printers)
+                {
+                    if (command.Data == item)
+                    {
+                        hasThePrinter = true;
+                        break;
+                    }
+                }
+                WsResponse<string> er = new WsResponse<string>();
                 er.Seq = command.Seq;
-                er.Data = result;
+                if (hasThePrinter) { 
+                    er.Data = "OK";
+                }
+                else
+                {
+                    er.Code = "NG";
+                }
+                Send(JsonConvert.SerializeObject(er));
+                #endregion
+            }
+            else
+            {
+                #region error
+                WsResponse<string> er = new WsResponse<string>();
+                er.Seq = command.Seq;
+                er.Code = "NG";
+                er.Data = "命令" + command.Command + "不支持";
                 Send(JsonConvert.SerializeObject(er));
                 #endregion
             }
@@ -221,13 +333,36 @@ namespace CrimPrintService
         /// <param name="seq">序号，用于区分回调</param>
         /// <param name="printerName">打印机，如果不指定，则使用画面上的打印机</param>
         /// <param name="imageList">待打印图片列表</param>
-        protected void printImage(string seq, string printerName, List<KeyValuePair<string, string>> imageList)
+        protected void printImage(string seq, string printer, List<KeyValuePair<string, string>> imageList)
         {
+            // 根据名称获取对应打印机
+            PrinterSetting printerSetting = null;
+            foreach (PrinterSetting ps in PrintSetting.Printers)
+            {
+                if (String.IsNullOrEmpty(printer) && ps.IsDefault)
+                {
+                    printerSetting = ps;
+                    break;
+                }
+                if (ps.ID == printer || ps.Printer == printer)
+                {
+                    printerSetting = ps;
+                    break;
+                }
+            }
+
+            if (printerSetting == null)
+            {
+                // 未找到指定打印机
+
+                return;
+            }
+
             // 设置打印时不再弹打印进度弹窗
             PrintController printController = new StandardPrintController();
             PrintDocument printDoc = new PrintDocument();
-            printDoc.DefaultPageSettings.Landscape = PrintSetting.Landscape;
-            printDoc.PrinterSettings.PrinterName = String.IsNullOrEmpty(printerName)? PrintSetting.Printer: printerName;
+            printDoc.DefaultPageSettings.Landscape = printerSetting.Landscape;
+            printDoc.PrinterSettings.PrinterName = printerSetting.Printer;
             printDoc.PrinterSettings.Copies = 1;
             //if (!String.IsNullOrEmpty(seq)) { 
             //    printDoc.PrinterSettings.PrintFileName = seq;
@@ -259,14 +394,14 @@ namespace CrimPrintService
             printDoc.PrintPage += (object sender, PrintPageEventArgs e) =>
             {
                 // inch
-                int x = toInchX100(PrintSetting.MarginLeft);
-                int y = toInchX100(PrintSetting.MarginTop);
+                int x = toInchX100(printerSetting.MarginLeft);
+                int y = toInchX100(printerSetting.MarginTop);
                 // inch
-                int xr = toInchX100(PrintSetting.MarginRight);
-                int yb = toInchX100(PrintSetting.MarginBottom);
+                int xr = toInchX100(printerSetting.MarginRight);
+                int yb = toInchX100(printerSetting.MarginBottom);
                 
                 int w = 300, h = 551;
-                switch (PrintSetting.Paper)
+                switch (printerSetting.Paper)
                 {
                     case "1":
                         {
@@ -308,6 +443,7 @@ namespace CrimPrintService
 
                         WsResponse<KeyValuePair<string, string>> rerr = new WsResponse<KeyValuePair<string, string>>();
                         rerr.Seq = seq;
+                        rerr.Code = "NET_ERR";
                         rerr.Data = new KeyValuePair<string, string>(image.Key, "error:" + response.StatusCode);
                         string msgerr = JsonConvert.SerializeObject(rerr);
                         Send(msgerr);
@@ -319,7 +455,7 @@ namespace CrimPrintService
                             Console.WriteLine(img.Width + "x" + img.Height);
                             Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
 
-                            if (PrintSetting.AutoSize)
+                            if (printerSetting.AutoSize)
                             {
                                 // e.MarginBounds
                                 e.MarginBounds.Offset(0, 0);
@@ -365,11 +501,11 @@ namespace CrimPrintService
             string msg = JsonConvert.SerializeObject(r);
             Send(msg);
         }
-        protected void printImage(string seq, string printerName, string image)
+        protected void printImage(string seq, string printer, string image)
         { 
             List<KeyValuePair<string, string>> imageList = new List<KeyValuePair<string, string>>();
             imageList.Add(new KeyValuePair<string, string>(seq, image));
-            printImage(seq, printerName, imageList);
+            printImage(seq, printer, imageList);
         }
 
         int toInchX100(int mm)
@@ -399,7 +535,17 @@ namespace CrimPrintService
 
     public class WsResponse<T>
     {
+        /// <summary>
+        /// 命令SEQ
+        /// </summary>
         public string Seq { get; set; }
+        /// <summary>
+        /// 错误编码
+        /// </summary>
+        public string Code { get; set; }
+        /// <summary>
+        /// 业务数据
+        /// </summary>
         public T Data
         {
             get;
