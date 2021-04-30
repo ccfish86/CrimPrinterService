@@ -371,8 +371,15 @@ namespace CrimPrintService
                     {
                         try
                         {
+                            Logger.InfoLog("同步信息号量");
+                            //同步信息号量  
+                            Monitor.Enter(PrintQueueMap[item]);
+
                             // 这儿需要处理其他打印格式
-                            PrintImageQueue(item, PrintQueueMap[item]).Wait();
+                            PrintImageQueue(item, PrintQueueMap[item], (str) => {
+                                Monitor.Exit(PrintQueueMap[item]);
+                                Logger.InfoLog("结束同步:" + str);
+                            });
 
                             //没有任务，休息3秒钟 
                             Thread.Sleep(1000);
@@ -380,6 +387,7 @@ namespace CrimPrintService
                         catch (Exception ex)
                         {
                             Logger.InfoLog(ex.ToString());
+                            Monitor.Exit(PrintQueueMap[item]);
                             //没有任务，休息3秒钟 
                             Thread.Sleep(3000);
                         }
@@ -394,7 +402,7 @@ namespace CrimPrintService
             }
         }
 
-        private async Task PrintImageQueue(string printer, Queue<PrintQueueItem> printQueue)
+        private void PrintImageQueue(string printer, Queue<PrintQueueItem> printQueue, Action<string> action)
         {
 
             var sw = new Stopwatch();
@@ -419,6 +427,7 @@ namespace CrimPrintService
             {
                 // 未找到指定打印机
                 sw.Stop();
+                action("1");
                 return;
             }
 
@@ -517,8 +526,8 @@ namespace CrimPrintService
                         {
                             Image img = Image.FromStream(stream);///实例化,得到img
                             //                Conole.wrimg.Width       img.Height
-                            Console.WriteLine(img.Width + "x" + img.Height);
-                            Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
+                            //Console.WriteLine(img.Width + "x" + img.Height);
+                            //Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
 
                             if (printerSetting.AutoSize)
                             {
@@ -546,8 +555,9 @@ namespace CrimPrintService
                 }
                 //}
 
-                if (printQueue.Count > 0)
+                if (page < 100 && printQueue.Count > 0)
                 {
+                    // 每次最大连续打印100页，
                     // 表示还有下一页，
                     command = printQueue.Dequeue();
                     e.HasMorePages = true;
@@ -556,6 +566,7 @@ namespace CrimPrintService
                 {
                     e.HasMorePages = false;
                     sw.Stop();
+                    action("2");
                 }
                 page++;
             };
@@ -605,7 +616,7 @@ namespace CrimPrintService
             if (printerSetting == null)
             {
                 // 未找到指定打印机
-
+                Logger.ErrorLog("未找到指定的打印机，请先确认配置");
                 return;
             }
 
@@ -703,8 +714,8 @@ namespace CrimPrintService
                         { 
                             Image img = Image.FromStream(stream);///实例化,得到img
                             //                Conole.wrimg.Width       img.Height
-                            Console.WriteLine(img.Width + "x" + img.Height);
-                            Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
+                            //Console.WriteLine(img.Width + "x" + img.Height);
+                            //Console.WriteLine(e.PageSettings.HardMarginX + "x" + e.PageSettings.HardMarginY);
 
                             if (printerSetting.AutoSize)
                             {
