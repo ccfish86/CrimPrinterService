@@ -18,6 +18,11 @@ namespace CrimPrintService
             set;
         }
 
+        public string NoticeUrl
+        {
+            get; set;
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
         public void NotifyPropertyChanged(string propertyName)
         {

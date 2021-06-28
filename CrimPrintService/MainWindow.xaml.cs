@@ -371,14 +371,14 @@ namespace CrimPrintService
                     {
                         try
                         {
-                            Logger.InfoLog("同步信息号量");
+                            // Logger.InfoLog("同步信息号量");
                             //同步信息号量  
                             Monitor.Enter(PrintQueueMap[item]);
 
                             // 这儿需要处理其他打印格式
                             PrintImageQueue(item, PrintQueueMap[item], (str) => {
                                 Monitor.Exit(PrintQueueMap[item]);
-                                Logger.InfoLog("结束同步:" + str);
+                                // Logger.InfoLog("结束同步:" + str);
                             });
 
                             //没有任务，休息3秒钟 
@@ -544,7 +544,11 @@ namespace CrimPrintService
                                 e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
                             }
                         }
-                        Logger.InfoLog("print printed" + command.Key + "  data:" + command.Value);
+                        Logger.InfoLog("printed " + command.Key + "  data:" + command.Value);
+
+
+                        // 通知服务器端
+                        PrintStateNotice.Notice(PrintSetting.NoticeUrl, command.Key, command.Value);
 
                         WsResponse<KeyValuePair<string, string>> rimage = new WsResponse<KeyValuePair<string, string>>();
                         rimage.Seq = command.Seq;
@@ -732,13 +736,17 @@ namespace CrimPrintService
                                 e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
                             }
                         }
-                        Logger.InfoLog("print printed" + image.Key + "  data:" + image.Value);
+                        Logger.InfoLog("printed " + image.Key + "  data:" + image.Value);
+
+                        // 通知服务器端
+                        PrintStateNotice.Notice(PrintSetting.NoticeUrl, image.Key, image.Value);
 
                         WsResponse<KeyValuePair<string, string>> rimage = new WsResponse<KeyValuePair<string, string>>();
                         rimage.Seq = seq;
                         rimage.Data = new KeyValuePair<string, string>(image.Key, "printed");
                         string msgImage = JsonConvert.SerializeObject(rimage);
                         Send(msgImage);
+
                     }
                 }
                 //}

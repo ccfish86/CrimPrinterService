@@ -159,5 +159,6 @@ namespace CrimPrintService
                 autoSize = value;
             }
         }
+
     }
 }

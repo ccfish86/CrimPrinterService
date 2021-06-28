@@ -5,8 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CrimPrintService"
         mc:Ignorable="d"
-        Title="犯罪大师-云打印-服务配置" Height="400" Width="700" Loaded="Window_Loaded">
-    <StackPanel x:Name="StackPanelMain" VerticalAlignment="Top" Width="700" Height="400" Orientation="Horizontal">
+        Title="犯罪大师-云打印-服务配置" Height="450" Width="900" Loaded="Window_Loaded" ResizeMode="NoResize">
+    <StackPanel x:Name="StackPanelMain" VerticalAlignment="Top" Width="900" Height="400" Orientation="Horizontal">
 
         <StackPanel VerticalAlignment="Top" Width="200" Height="400" Orientation="Vertical">
             <Label>打印机配置</Label>
@@ -29,10 +29,14 @@
                 </ListBox.ContextMenu>
             </ListBox>
         </StackPanel>
-        <StackPanel VerticalAlignment="Top" Width="500" Height="400" Orientation="Vertical">
+        <StackPanel VerticalAlignment="Top" Width="700" Height="400" Orientation="Vertical">
             <Grid x:Name="wsGrid" Margin="0 20 0 0" >
+                <Grid.Resources>
+                    <Style TargetType="RowDefinition">
+                        <Setter Property="Height" Value="36"/>
+                    </Style>
+                </Grid.Resources>
                 <Grid.RowDefinitions>
-
                     <RowDefinition></RowDefinition>
                     <RowDefinition></RowDefinition>
                 </Grid.RowDefinitions>
@@ -43,7 +47,9 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBox x:Name="textBoxPort" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="100" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=Port}"/>
-                <Label x:Name="labelPort" Grid.Row="0" Grid.Column="0" Content="端口号" HorizontalAlignment="Center"  VerticalAlignment="Center" />
+                <Label x:Name="labelPort" Grid.Row="0" Grid.Column="0" Content="端口号" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                <TextBox x:Name="textBoxNotice" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="550" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=NoticeUrl}"/>
+                <Label x:Name="labelNotice" Grid.Row="1" Grid.Column="0" Content="打印完通知" HorizontalAlignment="Right"  VerticalAlignment="Center" />
             </Grid>
             <Grid x:Name="mainGrid" Margin="0 20 0 0" DataContext="{Binding SelectedItem,ElementName=listBoxPrinters}">
                 <Grid.Resources>
@@ -72,7 +78,7 @@
                     <TextBlock Text="默认" Margin="10 0" Visibility="{Binding Path=IsDefault,Converter={StaticResource BoolToVisibilityConvert}}"></TextBlock>
                 </StackPanel>
 
-                <Label x:Name="labelID" Grid.Row="0" Grid.Column="0" Content="ID" HorizontalAlignment="Center"  VerticalAlignment="Center" />
+                <Label x:Name="labelID" Grid.Row="0" Grid.Column="0" Content="ID" HorizontalAlignment="Right"  VerticalAlignment="Center" />
 
                 <ComboBox x:Name="combBoxPrinter"  Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left"
                   Height="23" Width="180" SelectedValue="{Binding Mode=TwoWay,Path=Printer}" />
@@ -109,12 +115,12 @@
                     <CheckBox HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" IsChecked="{Binding Mode=TwoWay,Path=IsDefault}"/>
                     <Label>是否默认</Label>
                 </StackPanel>-->
-                
-                <Label x:Name="labelPrinter" Grid.Row="1" Grid.Column="0" Content="打印机" HorizontalAlignment="Center"  VerticalAlignment="Center"/>
-                <Label x:Name="labelPaperWH" Grid.Row="2" Grid.Column="0" Content="纸张宽x高(mm)" HorizontalAlignment="Center"  VerticalAlignment="Center"/>
-                <Label x:Name="labelPaperMargin" Grid.Row="3" Grid.Column="0" Content="边距(mm)" HorizontalAlignment="Center"  VerticalAlignment="Center"/>
-                <Label x:Name="labelPaperAutoSize" Grid.Row="4" Grid.Column="0" Content="自适应" HorizontalAlignment="Center"  VerticalAlignment="Center"/>
-                <Label x:Name="labelPaperLandscape" Grid.Row="5" Grid.Column="0" Content="纸张方向" HorizontalAlignment="Center"  VerticalAlignment="Center"/>
+
+                <Label x:Name="labelPrinter" Grid.Row="1" Grid.Column="0" Content="打印机" HorizontalAlignment="Right"  VerticalAlignment="Center"/>
+                <Label x:Name="labelPaperWH" Grid.Row="2" Grid.Column="0" Content="纸张宽x高(mm)" HorizontalAlignment="Right"  VerticalAlignment="Center"/>
+                <Label x:Name="labelPaperMargin" Grid.Row="3" Grid.Column="0" Content="边距(mm)" HorizontalAlignment="Right"  VerticalAlignment="Center"/>
+                <Label x:Name="labelPaperAutoSize" Grid.Row="4" Grid.Column="0" Content="自适应" HorizontalAlignment="Right"  VerticalAlignment="Center"/>
+                <Label x:Name="labelPaperLandscape" Grid.Row="5" Grid.Column="0" Content="纸张方向" HorizontalAlignment="Right"  VerticalAlignment="Center"/>
                 <!--<Label x:Name="labelIsDefault" Grid.Row="6" Grid.Column="0" Content="是否默认" HorizontalAlignment="Center"  VerticalAlignment="Center"/>-->
 
             </Grid>
