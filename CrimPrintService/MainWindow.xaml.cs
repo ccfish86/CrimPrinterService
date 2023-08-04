@@ -28,13 +28,15 @@ namespace CrimPrintService
         public MainWindow()
         {
             InitializeComponent();
-
-
         }
 
         private void AfterInit()
         {
             _setting = loadSetting();
+
+            //处理HttpWebRequest访问https有安全证书的问题（ 请求被中止: 未能创建 SSL/TLS 安全通道。）
+            ServicePointManager.ServerCertificateValidationCallback += (s, cert, chain, sslPolicyErrors) => true;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
         }
 
         private CustomSetting loadSetting()
@@ -800,7 +802,15 @@ namespace CrimPrintService
             WsResponse<string> r = new WsResponse<string>();
             r.Data = "连接成功";
             string msg = JsonConvert.SerializeObject(r);
-            Send(msg);
+            try
+            {
+                Send(msg);
+            }
+            catch (Exception ex)
+            {
+                // 发送消息异常
+                Logger.ErrorLog("发送消息异常", ex);
+            }
         }
     }
 
