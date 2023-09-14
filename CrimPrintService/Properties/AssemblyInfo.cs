@@ -10,8 +10,8 @@ using System.Windows;
 [assembly: AssemblyTitle("CrimPrintService")]
 [assembly: AssemblyDescription("Kuaidi100 电子面单打印")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("CrimPrintService")]
+[assembly: AssemblyCompany("青岛车门网络科技有限公司")]
+[assembly: AssemblyProduct("电子面单云打印")]
 [assembly: AssemblyCopyright("Copyright ©  2023")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -53,3 +53,5 @@ using System.Windows;
 // [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion("2.0.2.0")]
 [assembly: AssemblyFileVersion("2.0.2.0")]
+[assembly: NeutralResourcesLanguage("zh-Hans")]
+

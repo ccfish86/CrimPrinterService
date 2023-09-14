@@ -115,6 +115,8 @@ namespace CrimPrintService
         private void buttonStart_Click(object sender, RoutedEventArgs e)
         {
 
+
+
             // 启动服务
             this.StartServer();
         }
@@ -124,14 +126,14 @@ namespace CrimPrintService
             // 启动服务
             try
             {
-                Console.WriteLine("server start");
+                Logger.InfoLog("server start");
                 wssv = new WebSocketServer("ws://0.0.0.0:" + Math.Min(Setting.Port, 65535));
                 wssv.AddWebSocketService<Laputa>("/Laputa", (Laputa laputa) => {
                     laputa.PrintSetting = Setting;
                     laputa.Start();
                 });
                 Setting.Started = true;
-                Console.WriteLine("server started");
+                Logger.InfoLog("server started");
                 wssv.Start();
             }
             catch (InvalidOperationException ex)
@@ -215,7 +217,6 @@ namespace CrimPrintService
 
         private void menuItemDel_Checked(object sender, RoutedEventArgs e)
         {
-
             if (listBoxPrinters.SelectedIndex == -1)
             {
                 return;
@@ -223,6 +224,11 @@ namespace CrimPrintService
             Setting.Printers.RemoveAt(listBoxPrinters.SelectedIndex);
 
             Console.WriteLine(listBoxPrinters.SelectedIndex);
+        }
+
+        private void buttonPrinters_Click(object sender, RoutedEventArgs e)
+        {
+            getPrinters();
         }
     }
 
@@ -390,17 +396,17 @@ namespace CrimPrintService
                         {
                             Logger.InfoLog(ex.ToString());
                             Monitor.Exit(PrintQueueMap[item]);
-                            //没有任务，休息3秒钟 
-                            Thread.Sleep(3000);
+                            //没有任务，休息1秒钟 
+                            Thread.Sleep(1000);
                         }
                     }
                     else
                     {
                         //没有任务，休息3秒钟 
-                        Thread.Sleep(3000);
+                        Thread.Sleep(1000);
                     }
                 }
-
+                Thread.Sleep(1000);
             }
         }
 
@@ -578,12 +584,6 @@ namespace CrimPrintService
             };
 
             printDoc.Print();
-
-            //WsResponse<string> r = new WsResponse<string>();
-            //r.Seq = seq;
-            //r.Data = "printed";
-            //string msg = JsonConvert.SerializeObject(r);
-            //Send(msg);
         }
 
         ConcurrentDictionary<String, Queue<PrintQueueItem>> PrintQueueMap = new ConcurrentDictionary<String, Queue<PrintQueueItem>>(); //实例化一个队列
@@ -592,9 +592,7 @@ namespace CrimPrintService
         {
             get;set;
         }
-
-
-
+        
         /// <summary>
         /// 打印
         /// </summary>
@@ -761,12 +759,14 @@ namespace CrimPrintService
                 else
                 {
                     e.HasMorePages = false;
+                    // 清除资源
+                    // printDoc.Dispose();
                 }
                 page++;
             };
 
             printDoc.Print();
-            
+
             WsResponse<string> r = new WsResponse<string>();
             r.Seq = seq;
             r.Data = "printed";

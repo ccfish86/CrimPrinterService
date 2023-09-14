@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CrimPrintService"
         mc:Ignorable="d"
-        Title="犯罪大师-云打印-服务配置" Height="450" Width="900" Loaded="Window_Loaded" ResizeMode="NoResize">
+        Title="云打印-服务配置" Height="450" Width="900" Loaded="Window_Loaded" ResizeMode="NoResize">
     <StackPanel x:Name="StackPanelMain" VerticalAlignment="Top" Width="900" Height="400" Orientation="Horizontal">
 
         <StackPanel VerticalAlignment="Top" Width="200" Height="400" Orientation="Vertical">
@@ -38,7 +38,7 @@
                 </Grid.Resources>
                 <Grid.RowDefinitions>
                     <RowDefinition></RowDefinition>
-                    <RowDefinition></RowDefinition>
+                    <!--  <RowDefinition></RowDefinition> -->
                 </Grid.RowDefinitions>
 
                 <Grid.ColumnDefinitions>
@@ -48,8 +48,8 @@
 
                 <TextBox x:Name="textBoxPort" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="100" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=Port}"/>
                 <Label x:Name="labelPort" Grid.Row="0" Grid.Column="0" Content="端口号" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                <TextBox x:Name="textBoxNotice" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="550" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=NoticeUrl}"/>
-                <Label x:Name="labelNotice" Grid.Row="1" Grid.Column="0" Content="打印完通知" HorizontalAlignment="Right"  VerticalAlignment="Center" />
+                <!--<TextBox x:Name="textBoxNotice" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="550" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=NoticeUrl}"/>-->
+                <!-- <Label x:Name="labelNotice" Grid.Row="1" Grid.Column="0" Content="打印完通知" HorizontalAlignment="Right"  VerticalAlignment="Center" /> -->
             </Grid>
             <Grid x:Name="mainGrid" Margin="0 20 0 0" DataContext="{Binding SelectedItem,ElementName=listBoxPrinters}">
                 <Grid.Resources>
@@ -82,10 +82,13 @@
 
                 <ComboBox x:Name="combBoxPrinter"  Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left"
                   Height="23" Width="180" SelectedValue="{Binding Mode=TwoWay,Path=Printer}" />
+
+                <Button x:Name="buttonPrinters" Content="刷新" Grid.Row="1" Grid.Column="1" Width="60" Margin="185 6 6 6"  HorizontalAlignment="Left" Click="buttonPrinters_Click" />
+                
                 <ComboBox x:Name="combBoxPaper"  Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Height="23" Width="180" 
                   SelectedValuePath="Tag" 
                   SelectedValue="{Binding Mode=TwoWay,Path=Paper}" >
-                    <ComboBoxItem Content="极兔速递 76x130" Tag="1" />
+                    <ComboBoxItem Content="通用 76x130" Tag="1" />
                     <ComboBoxItem Content="邮政 100x180" Tag="2"/>
                     <ComboBoxItem Content="其他 100x150" Tag="3"/>
                 </ComboBox>
