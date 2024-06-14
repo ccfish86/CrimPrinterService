@@ -36,7 +36,7 @@ namespace CrimPrintService
 
             //处理HttpWebRequest访问https有安全证书的问题（ 请求被中止: 未能创建 SSL/TLS 安全通道。）
             ServicePointManager.ServerCertificateValidationCallback += (s, cert, chain, sslPolicyErrors) => true;
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+            ServicePointManager.SecurityProtocol =  SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
         }
 
         private CustomSetting loadSetting()
@@ -107,6 +107,11 @@ namespace CrimPrintService
             }
         }
         private void button_Click(object sender, RoutedEventArgs e)
+        {
+            saveSettings();
+        }
+
+        private void saveSettings()
         {
             String config = JsonConvert.SerializeObject(Setting);
             File.WriteAllText("setting.json", config);
@@ -213,6 +218,9 @@ namespace CrimPrintService
                     p.IsDefault = false;
                 }
             }
+
+            listBoxPrinters.UpdateLayout();
+            saveSettings();
         }
 
         private void menuItemDel_Checked(object sender, RoutedEventArgs e)
@@ -496,7 +504,20 @@ namespace CrimPrintService
                             h = toInchX100(180);
                             break;
                         }
+                    case "4":
+                        {
+                            w = toInchX100(152.4);
+                            h = toInchX100(101.6);
+                            break;
+                        }
+                    case "5":
+                        {
+                            w = toInchX100(148);
+                            h = toInchX100(105);
+                            break;
+                        }
                     case "3":
+                    case "9":
                     default:
                         {
                             w = toInchX100(100);
@@ -682,7 +703,20 @@ namespace CrimPrintService
                             h = toInchX100(180);
                             break;
                         }
+                    case "4":
+                        {
+                            w = toInchX100(152.4);
+                            h = toInchX100(101.6);
+                            break;
+                        }
+                    case "5":
+                        {
+                            w = toInchX100(148);
+                            h = toInchX100(105);
+                            break;
+                        }
                     case "3":
+                    case "9":
                     default:
                         {
                             w = toInchX100(100);
@@ -781,7 +815,7 @@ namespace CrimPrintService
             printImage(seq, printer, imageList);
         }
 
-        int toInchX100(int mm)
+        int toInchX100(double mm)
         {
             return (int)(mm * 3.937);
         }
