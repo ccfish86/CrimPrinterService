@@ -82,7 +82,7 @@ namespace CrimPrintService
                 // Setting.Printer = printDocument.PrinterSettings.PrinterName;
                 // 配置默认打印机
                 PrinterSetting p = new PrinterSetting();
-                p.ID = "default";
+                p.Id = "default";
                 p.Printer = printDocument.PrinterSettings.PrinterName;
                 p.MarginTop = 0;
                 p.MarginLeft = 0;
@@ -179,7 +179,7 @@ namespace CrimPrintService
         {
             // 添加打印机
             PrinterSetting p = new PrinterSetting();
-            p.ID = "new";
+            p.Id = "new";
             p.MarginTop = 0;
             p.MarginLeft = 0;
             p.Landscape = false;
@@ -193,7 +193,7 @@ namespace CrimPrintService
         {
             foreach (PrinterSetting p in Setting.Printers)
             {
-                if (p.ID == Setting.SelectedID)
+                if (p.Id == Setting.SelectedID)
                 {
                     Setting.Printers.Remove(p);
                     break;
@@ -432,7 +432,7 @@ namespace CrimPrintService
                     printerSetting = ps;
                     break;
                 }
-                if (ps.ID == printer || ps.Printer == printer)
+                if (ps.Id == printer || ps.Printer == printer)
                 {
                     printerSetting = ps;
                     break;
@@ -631,7 +631,7 @@ namespace CrimPrintService
                     printerSetting = ps;
                     break;
                 }
-                if (ps.ID == printer || ps.Printer == printer)
+                if (ps.Id == printer || ps.Printer == printer)
                 {
                     printerSetting = ps;
                     break;

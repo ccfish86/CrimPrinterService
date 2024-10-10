@@ -1,18 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace CrimPrintService
 {
-    public class PrinterSetting
+    public class PrinterSetting : INotifyPropertyChanged
     {
         string id;
         string printer;
 
         bool isDefault;
-
+        string paper;
         int marginTop;
         int marginLeft;
         int marginRight;
@@ -22,25 +23,14 @@ namespace CrimPrintService
 
         bool autoSize;
 
-        public string ID
-        {
-            get
-            {
-                return Id;
-            }
-
-            set
-            {
-                Id = value;
-            }
-        }
-        
-
-
         public string Paper
         {
-            get;
-            set;
+            get { return paper; }
+            set
+            {
+                paper = value;
+                OnPropertyChanged(nameof(Paper));
+            }
         }
 
         public string Id
@@ -53,6 +43,7 @@ namespace CrimPrintService
             set
             {
                 id = value;
+                OnPropertyChanged(nameof(Id));
             }
         }
 
@@ -66,6 +57,7 @@ namespace CrimPrintService
             set
             {
                 printer = value;
+                OnPropertyChanged(nameof(Printer));
             }
         }
 
@@ -79,6 +71,7 @@ namespace CrimPrintService
             set
             {
                 marginTop = value;
+                OnPropertyChanged(nameof(MarginTop));
             }
         }
 
@@ -92,6 +85,7 @@ namespace CrimPrintService
             set
             {
                 marginLeft = value;
+                OnPropertyChanged(nameof(MarginLeft));
             }
         }
 
@@ -105,6 +99,7 @@ namespace CrimPrintService
             set
             {
                 landscape = value;
+                OnPropertyChanged(nameof(Landscape));
             }
         }
 
@@ -118,6 +113,7 @@ namespace CrimPrintService
             set
             {
                 isDefault = value;
+                OnPropertyChanged(nameof(IsDefault));
             }
         }
 
@@ -131,6 +127,7 @@ namespace CrimPrintService
             set
             {
                 marginRight = value;
+                OnPropertyChanged(nameof(MarginRight));
             }
         }
 
@@ -144,6 +141,7 @@ namespace CrimPrintService
             set
             {
                 marginBottom = value;
+                OnPropertyChanged(nameof(MarginBottom));
             }
         }
 
@@ -157,8 +155,14 @@ namespace CrimPrintService
             set
             {
                 autoSize = value;
+                OnPropertyChanged(nameof(AutoSize));
             }
         }
+        public event PropertyChangedEventHandler PropertyChanged;
 
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }
