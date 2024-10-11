@@ -33,7 +33,7 @@ namespace CrimPrintService
             }
         }
 
-        public string Id
+        public string ID
         {
             get
             {
@@ -43,7 +43,7 @@ namespace CrimPrintService
             set
             {
                 id = value;
-                OnPropertyChanged(nameof(Id));
+                OnPropertyChanged(nameof(ID));
             }
         }
 
