@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CrimPrintService.utils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -22,11 +23,11 @@ namespace CrimPrintService
             {
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
-                    Logger.InfoLog("print state noticed " + purl);
+                    CrimLogger.InfoLog("print state noticed " + purl);
                 }
                 else
                 {
-                    Logger.ErrorLog("print state noticed error " + purl);
+                    CrimLogger.ErrorLog("print state noticed error " + purl);
                 }
             }
         }

@@ -14,8 +14,15 @@ using System.Collections.ObjectModel;
 using System.Collections;
 using System.Threading;
 using System.Collections.Concurrent;
-using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Security.Authentication;
+using TaishanPrintService.models;
+using TaishanPrintService.utils;
+using Spire.Pdf;
+using Spire.Pdf.Print;
+using CrimPrintService.utils;
+using System.Reflection;
+using System.Threading.Tasks;
 
 namespace CrimPrintService
 {
@@ -25,42 +32,85 @@ namespace CrimPrintService
     public partial class MainWindow : Window
     {
 
+        private System.Windows.Forms.NotifyIcon notifyIcon;
+
         public MainWindow()
         {
             InitializeComponent();
+            InitializeSystemTrayIcon();
         }
 
+        private void InitializeSystemTrayIcon()
+        {
+            this.notifyIcon = new System.Windows.Forms.NotifyIcon();
+
+            // 设置图标
+            this.notifyIcon.Icon = new System.Drawing.Icon("./printer.ico");
+
+            // 设置提示文本
+            this.notifyIcon.Text = "云打印";
+            this.notifyIcon.Visible = true;
+
+            // 设置点击事件
+            this.notifyIcon.MouseClick += NotifyIcon_MouseClick;
+        }
+
+        private void NotifyIcon_MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                // 当点击左键时显示或隐藏窗口
+                if (this.Visibility == Visibility.Visible)
+                {
+                    this.Hide();
+                }
+                else
+                {
+                    this.Show();
+                    this.Activate();
+                }
+            }
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            base.OnClosing(e);
+
+            // 关闭窗口时同时退出应用程序
+            this.notifyIcon.Dispose();
+        }
         private void AfterInit()
         {
             _setting = loadSetting();
+            _setting.State = 0;
 
             //处理HttpWebRequest访问https有安全证书的问题（ 请求被中止: 未能创建 SSL/TLS 安全通道。）
             ServicePointManager.ServerCertificateValidationCallback += (s, cert, chain, sslPolicyErrors) => true;
-            ServicePointManager.SecurityProtocol =  SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+
+            // 将版本号转换为字符串格式，并添加"v"前缀
+            Version version = Assembly.GetExecutingAssembly().GetName().Version;
+            string versionString = $"v{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+            this.Title = $"云打印服务：： {versionString}";
         }
 
         private CustomSetting loadSetting()
         {
-            Logger.InfoLog("load settings");
+            CrimLogger.InfoLog("load settings");
             if (File.Exists("setting.json")) {
                 string str = File.ReadAllText("setting.json");
                 return JsonConvert.DeserializeObject<CustomSetting>(str);
             }
 
             var config = new CustomSetting();
-            config.Port = 9999;
+            config.Url = "wss://climber.dongyuejihua.com/ws/p/stream";
+            config.Key = "";
             // config.MarginTop = 0;
             // config.MarginLeft = 0;
             // config.Landscape = false;
             // config.Paper = "1";
             config.Started = false;
             return config;
-        }
-
-        public int Port
-        {
-            get;
-            set;
         }
 
         private void getPrinters()
@@ -74,12 +124,12 @@ namespace CrimPrintService
                 result.Add(item);
                 Console.WriteLine(item);
             }
-            if (Setting.Printers == null || Setting.Printers.Count == 0) {
-                if (Setting.Printers == null)
+            if (_setting.Printers == null || _setting.Printers.Count == 0) {
+                if (_setting.Printers == null)
                 {
-                    Setting.Printers = new ObservableCollection<PrinterSetting>();
+                    _setting.Printers = new ObservableCollection<PrinterSetting>();
                 }
-                // Setting.Printer = printDocument.PrinterSettings.PrinterName;
+                // _setting.Printer = printDocument.PrinterSettings.PrinterName;
                 // 配置默认打印机
                 PrinterSetting p = new PrinterSetting();
                 p.ID = "default";
@@ -89,7 +139,7 @@ namespace CrimPrintService
                 p.Landscape = false;
                 p.Paper = "1";
 
-                Setting.Printers.Add(p);
+                _setting.Printers.Add(p);
             }
 
             this.combBoxPrinter.ItemsSource = result;
@@ -97,15 +147,7 @@ namespace CrimPrintService
 
         private CustomSetting _setting;
 
-        public  CustomSetting Setting {
-            get {
-                return _setting;
-                }
-            set
-            {
-                _setting = value;
-            }
-        }
+
         private void button_Click(object sender, RoutedEventArgs e)
         {
             saveSettings();
@@ -113,38 +155,448 @@ namespace CrimPrintService
 
         private void saveSettings()
         {
-            String config = JsonConvert.SerializeObject(Setting);
+            String config = JsonConvert.SerializeObject(_setting);
             File.WriteAllText("setting.json", config);
         }
 
         private void buttonStart_Click(object sender, RoutedEventArgs e)
         {
-
-
-
-            // 启动服务
+            // 连接服务
             this.StartServer();
+            this.connectServer();
         }
+
+       void connectServer()
+        {
+            // 连接服务器
+            _setting.Started = false;
+            if (_webSocket != null&&_webSocket.ReadyState == WebSocketState.Open)
+            {
+                _setting.State = 2;
+                _setting.Started = true;
+                return;
+            }
+            if (!_setting.Url.IsNullOrEmpty() && !_setting.Key.IsNullOrEmpty())
+            {
+                _setting.State = 1;
+                var url = string.Format("{0}?key={1}", this._setting.Url, this._setting.Key);
+                _webSocket = new WebSocket(url);
+                _webSocket.SslConfiguration.EnabledSslProtocols = SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12;
+
+                _webSocket.WaitTime = TimeSpan.FromSeconds(30);
+                _webSocket.EmitOnPing = true;
+                _webSocket.OnMessage += _webSocket_OnMessage;
+                _webSocket.OnOpen += _webSocket_OnOpen;
+                _webSocket.OnError += _webSocket_OnError; ;
+                _webSocket.OnClose += this.OnWsClosed;
+                try { 
+                    _webSocket.Connect();
+                }
+                catch (Exception ex)
+                {
+                    CrimLogger.ErrorLog("连接异常", ex);
+                    _setting.State = 3;
+
+                    // 1分钟后重连
+                    var t = Task.Delay(60000).ContinueWith((task) =>
+                    {
+                        // 后台重连
+                        Thread thread = new Thread(reconnect);
+                        thread.IsBackground = true;
+                        thread.Start();
+                    });
+                    t.Start();
+                }
+                _setting.Started = true;
+
+            }
+        }
+
+        private void _webSocket_OnOpen(object sender, EventArgs e)
+        {
+            // _webSocket.Ping();
+            CrimLogger.InfoLog("连接成功");
+            _setting.State = 2;
+            wsopen = true;
+            if (pingTimer == null)
+            {
+                pingTimer = new Timer(TimerTaskPingCallback, null, 20000, 40000);
+            }
+        }
+
+        private void TimerTaskPingCallback(Object state)
+        {
+            if (_webSocket != null && _webSocket.ReadyState == WebSocketState.Open)
+            {
+                _webSocket.Ping();
+            }
+        }
+        private void _webSocket_OnError(object sender, WebSocketSharp.ErrorEventArgs e)
+        {
+            CrimLogger.ErrorLog("Websocket error.", e.Exception);
+        }
+
+        private void _webSocket_OnMessage(object sender, MessageEventArgs e)
+        {
+            CrimLogger.InfoLog("收到消息" + e.Data);
+            // 转json
+            PrintServerMsg printMsg = JsonConvert.DeserializeObject< PrintServerMsg>(e.Data);
+            if (printMsg.Type == 5)
+            {
+                // 打印PDF
+                if (!printMsg.Data.IsNullOrEmpty())
+                {
+                    var pdfMsg = JsonConvert.DeserializeObject<PrintServerPdfMsg>(printMsg.Data);
+                    this.doPrintPdf(pdfMsg);
+                }
+            }
+            else if (printMsg.Type == 6)
+            {
+                // 打印快递单
+                if (!printMsg.Data.IsNullOrEmpty())
+                {
+                    var imgMsg = JsonConvert.DeserializeObject<PrintServerImgMsg>(printMsg.Data);
+                    this.doPrintImg(imgMsg);
+                }
+            }
+            else if (printMsg.Type == 99)
+            {
+                // 异常
+                wsopen = false;
+                this.WsClose();
+                MessageBox.Show(printMsg.Data);
+            }
+            else
+            {
+                CrimLogger.InfoLog("未知消息类型 请升级版本再试" + printMsg.Type);
+            }
+        }
+
+        [STAThread]
+        private void doPrintImg(PrintServerImgMsg imgMsg)
+        {
+            PrinterPool printerPool = PrinterPool.GetPrinterPool();
+            var printerSetting = getPrinterSetting(imgMsg.PrinterID);
+            if (printerSetting == null)
+            {
+                PrintServerAck er = new PrintServerAck();
+                var printResult = new PrintServerPdfPrintResult();
+                printResult.ID = imgMsg.ID;
+                printResult.PrintState = 6;
+                er.Seq = imgMsg.ID;
+                er.Code = "404";
+                er.Message = "无法找到对应的打印机" + imgMsg.PrinterID;
+                er.Type = 106;
+                er.Data = JsonConvert.SerializeObject(printResult);
+                _webSocket.Send(JsonConvert.SerializeObject(er));
+                return;
+            }
+            printerPool.printImage(printerSetting, imgMsg.ID, imgMsg.Files, _webSocket.Send);
+        }
+
+        private PrinterSetting getPrinterSetting(string printer)
+        {
+            // 根据名称获取对应打印机
+            PrinterSetting printerSetting = null;
+            foreach (PrinterSetting ps in _setting.Printers)
+            {
+                if (ps.ID == printer)
+                {
+                    printerSetting = ps;
+                    break;
+                }
+            }
+
+            if (printerSetting == null)
+            {
+                CrimLogger.ErrorLog("未找到指定的打印机" + printer);
+                MessageBox.Show("未找到指定的打印机\n 请追加ID=" + printer + "的打印机");
+                return null;
+            }
+            return printerSetting;
+        }
+
+        private void doPrintExpress(PrintServerPdfMsg expressMsg)
+        {
+            //var sw = new Stopwatch();
+            CrimLogger.InfoLog("print " + expressMsg.ID + " "+ expressMsg.PrinterID);
+            var printerSetting = getPrinterSetting(expressMsg.PrinterID);
+            if (printerSetting == null)
+            {
+                PrintServerAck er = new PrintServerAck();
+                var printResult = new PrintServerPdfPrintResult();
+                printResult.ID = expressMsg.ID;
+                printResult.PrintState = 6;
+                er.Seq = expressMsg.ID;
+                er.Code = "404";
+                er.Message = "无法找到对应的打印机" + expressMsg.PrinterID;
+                er.Type = 105;
+                er.Data = JsonConvert.SerializeObject(printResult);
+                _webSocket.Send(JsonConvert.SerializeObject(er));
+                return;
+            }
+            foreach (var htmlUrl in expressMsg.Files)
+            {
+                using (PdfDocument pdfDoc = new PdfDocument())
+                {
+                    pdfDoc.LoadFromHTML(htmlUrl, false, false, true);
+                    // 打印参数
+                    PdfPrintSettings printSettings = new PdfPrintSettings();
+                    if (printerSetting.Paper == "A4")
+                    {
+                        printSettings.PaperSize = PdfPaperSizes.A4;
+                    }
+                    else if (printerSetting.Paper == "A5")
+                    {
+                        printSettings.PaperSize = PdfPaperSizes.A5;
+                    }
+                    else if (printerSetting.Paper == "A6")
+                    {
+                        printSettings.PaperSize = PdfPaperSizes.A6;
+                    }
+                    else
+                    {
+                        var w = PageUtils.ToInchX100(76);
+                        var h = PageUtils.ToInchX100(130);
+                        printSettings.PaperSize = new PaperSize("E76", w, h);
+                    }
+                    printSettings.Landscape = printerSetting.Landscape;
+                    printSettings.PrinterName = printerSetting.Printer;
+                    printSettings.BeginPrint += (object sender, PrintEventArgs e) =>
+                    {
+                        // 打印开始事件
+                        CrimLogger.InfoLog("print begin [" + expressMsg.ID + "]: " + htmlUrl);
+                        var printResult = new PrintServerPdfPrintResult
+                        {
+                            ID = expressMsg.ID,
+                            PrintState = 2
+                        };
+                        PrintServerAck br = new PrintServerAck
+                        {
+                            Seq = expressMsg.ID,
+                            Type = 106,
+                            Data = JsonConvert.SerializeObject(printResult)
+                        };
+                        _webSocket.Send(JsonConvert.SerializeObject(br));
+                    };
+                    printSettings.EndPrint += (object sender, PrintEventArgs e) =>
+                    {
+                        // 打印结束事件
+                        CrimLogger.InfoLog("print end [" + expressMsg.ID + "]: " + htmlUrl);
+                        var printResult = new PrintServerPdfPrintResult
+                        {
+                            ID = expressMsg.ID,
+                            PrintState = 3
+                        };
+                        PrintServerAck er = new PrintServerAck
+                        {
+                            Seq = expressMsg.ID,
+                            Type = 106,
+                            Data = JsonConvert.SerializeObject(printResult)
+                        };
+                        _webSocket.Send(JsonConvert.SerializeObject(er));
+                    };
+
+                    pdfDoc.Print(printSettings);
+                }
+            }
+        }
+        /// <summary>
+        /// PDF打印
+        /// </summary>
+        /// <param name="pdfMsg"></param>
+        private void doPrintPdf(PrintServerPdfMsg pdfMsg) 
+        {
+            //var sw = new Stopwatch();
+            var printerSetting = getPrinterSetting(pdfMsg.PrinterID);
+            if (printerSetting == null)
+            {
+                PrintServerAck er = new PrintServerAck();
+                var printResult = new PrintServerPdfPrintResult();
+                printResult.ID = pdfMsg.ID;
+                printResult.PrintState = 6;
+                er.Seq = pdfMsg.ID;
+                er.Code = "404";
+                er.Message = "无法找到对应的打印机" + pdfMsg.PrinterID;
+                er.Type = 105;
+                er.Data = JsonConvert.SerializeObject(printResult);
+                _webSocket.Send(JsonConvert.SerializeObject(er));
+                return;
+            }
+            foreach (var pdfUrl in pdfMsg.Files) {
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(pdfUrl);
+                // 设置超时时间为5000毫秒
+                // request.Timeout = 20000;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse()) //获得响应) 
+                {
+                    if (response.StatusCode != HttpStatusCode.OK)
+                    {
+                        // 打印打印失败
+                        CrimLogger.ErrorLog("print error [" + pdfMsg.ID + "]: " + pdfUrl);
+                        CrimLogger.ErrorLog("print error [" + response.StatusCode + "]: " + response.StatusDescription);
+                        var printResult = new PrintServerPdfPrintResult
+                        {
+                            ID = pdfMsg.ID,
+                            PrintState = 6
+                        };
+                        PrintServerAck er = new PrintServerAck
+                        {
+                            Seq = pdfMsg.ID,
+                            Code = response.StatusCode.ToString(),
+                            Message = response.StatusDescription,
+                            Type = 105,
+                            Data = JsonConvert.SerializeObject(printResult)
+                        };
+                        _webSocket.Send(JsonConvert.SerializeObject(er));
+                    }
+                    else
+                    {
+                        using (var stream = response.GetResponseStream())
+                        {
+                            using (PdfDocument pdfDoc = new PdfDocument()) { 
+                                using (MemoryStream ms = new MemoryStream())
+                                {
+                                    stream.CopyTo(ms);
+                                    pdfDoc.LoadFromStream(ms);
+                                }
+                                // 打印参数
+                                PdfPrintSettings printSettings = new PdfPrintSettings();
+                                if (printerSetting.Paper == "A4") { 
+                                    printSettings.PaperSize = PdfPaperSizes.A4;
+                                    printSettings.Landscape = printerSetting.Landscape;
+                                }
+                                else if (printerSetting.Paper == "A5")
+                                {
+                                    printSettings.PaperSize = PdfPaperSizes.A5;
+                                    printSettings.Landscape = printerSetting.Landscape;
+                                }
+                                else if (printerSetting.Paper == "A6")
+                                {
+                                    printSettings.PaperSize = PdfPaperSizes.A6;
+                                    printSettings.Landscape = printerSetting.Landscape;
+                                }
+                                else 
+                                {
+                                    var esize = PageUtils.PageToInchX100(printerSetting.Paper);
+                                    printSettings.PaperSize = new PaperSize("USER", esize.Width, esize.Height);
+                                }
+                                printSettings.PrinterName = printerSetting.Printer;
+                                printSettings.BeginPrint  += (object sender, PrintEventArgs e) =>
+                                {
+                                    // 打印开始事件
+                                    CrimLogger.InfoLog("print begin [" + pdfMsg.ID + "]: " + pdfUrl);
+                                    var printResult = new PrintServerPdfPrintResult
+                                    {
+                                        ID = pdfMsg.ID,
+                                        PrintState = 2
+                                    };
+                                    PrintServerAck br = new PrintServerAck
+                                    {
+                                        Seq = pdfMsg.ID,
+                                        Type = 105,
+                                        Data = JsonConvert.SerializeObject(printResult)
+                                    };
+                                    _webSocket.Send(JsonConvert.SerializeObject(br));
+                                };
+                                printSettings.EndPrint += (object sender, PrintEventArgs e) =>
+                                {
+                                    // 打印结束事件
+                                    CrimLogger.InfoLog("print end [" + pdfMsg.ID + "]: " + pdfUrl);
+                                    var printResult = new PrintServerPdfPrintResult
+                                    {
+                                        ID = pdfMsg.ID,
+                                        PrintState = 3
+                                    };
+                                    PrintServerAck er = new PrintServerAck();
+                                    er.Seq = pdfMsg.ID;
+                                    er.Type = 105;
+                                    er.Data = JsonConvert.SerializeObject(printResult);
+                                    _webSocket.Send(JsonConvert.SerializeObject(er));
+                                };
+
+                                pdfDoc.Print(printSettings);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private void OnWsClosed(object sender, CloseEventArgs e)
+        {
+            if (pingTimer != null) { 
+                pingTimer.Dispose();
+                pingTimer = null;
+            }
+
+            if (e.Code == 1006) { 
+                _setting.State = 3;
+            }
+            else
+            {
+                _setting.State = 0;
+            }
+            CrimLogger.InfoLog("已断开:" + e.Code);
+
+            // 后台重连
+            Thread thread = new Thread(reconnect);
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void reconnect()
+        {
+            var reconnTtl = 5000;
+            while(wsopen && _webSocket.ReadyState != WebSocketState.Open) { 
+                try
+                {
+                    _setting.State = 1;
+                    CrimLogger.InfoLog("重连");
+                    Thread.Sleep(reconnTtl);
+                    _webSocket.Connect();
+                    reconnTtl = 5000;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    reconnTtl = reconnTtl * 2;
+                    CrimLogger.InfoLog("重连失败:" + ex.Message);
+                    CrimLogger.ErrorLog("重连失败", ex);
+                }
+            }
+        }
+
+        private WebSocket _webSocket;
+        private Timer pingTimer;
+        private bool wsopen;
+
+        /// <summary>
+        /// 启动打印服务
+        /// </summary>
         void StartServer()
         {
-
             // 启动服务
             try
             {
-                Logger.InfoLog("server start");
-                wssv = new WebSocketServer("ws://0.0.0.0:" + Math.Min(Setting.Port, 65535));
-                wssv.AddWebSocketService<Laputa>("/Laputa", (Laputa laputa) => {
-                    laputa.PrintSetting = Setting;
+                if (!_setting.StartLocal)
+                {
+                    return;
+                }
+                CrimLogger.InfoLog("server start");
+                wssv = new WebSocketServer("ws://0.0.0.0:" + Math.Min(_setting.Port, 65535));
+                wssv.AddWebSocketService<Laputa>("/Laputa", (Laputa laputa) =>
+                {
+                    laputa.PrintSetting = _setting;
                     laputa.Start();
                 });
-                Setting.Started = true;
-                Logger.InfoLog("server started");
+                _setting.Started = true;
+                CrimLogger.InfoLog("server started");
                 wssv.Start();
             }
             catch (InvalidOperationException ex)
             {
-                Logger.ErrorLog("启动失败");
-                Setting.Started = false;
+                CrimLogger.ErrorLog("启动失败");
+                _setting.Started = false;
                 MessageBox.Show("启动失败！");
             }
         }
@@ -152,11 +604,23 @@ namespace CrimPrintService
 
         private void buttonStop_Click(object sender, RoutedEventArgs e)
         {
-            if (wssv!=null) { 
-                Setting.Started = false;
+            wsopen = false;
+            this.WsClose();
+
+            if (wssv != null)
+            {
+                _setting.Started = false;
                 wssv.Stop();
             }
         }
+        public void WsClose()
+        {
+            this._webSocket.OnClose -= this.OnWsClosed;
+            this._webSocket.Close(CloseStatusCode.Normal, "close");
+            _setting.State = 0;
+            _setting.Started = false;
+        }
+
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -164,10 +628,11 @@ namespace CrimPrintService
 
             this.getPrinters();
 
-            this.StackPanelMain.DataContext = Setting;
+            this.StackPanelMain.DataContext = _setting;
 
             // 启动服务
             this.StartServer();
+            this.connectServer();
         }
 
         private void listBoxPrinters_Selected(object sender, RoutedEventArgs e)
@@ -184,18 +649,18 @@ namespace CrimPrintService
             p.MarginLeft = 0;
             p.Landscape = false;
             p.Paper = "1";
-            Setting.Printers.Add(p);
+            _setting.Printers.Add(p);
             
-            Setting.SelectedID = "new";
+            _setting.SelectedID = "new";
         }
 
         private void buttonDel_Click(object sender, RoutedEventArgs e)
         {
-            foreach (PrinterSetting p in Setting.Printers)
+            foreach (PrinterSetting p in _setting.Printers)
             {
-                if (p.ID == Setting.SelectedID)
+                if (p.ID == _setting.SelectedID)
                 {
-                    Setting.Printers.Remove(p);
+                    _setting.Printers.Remove(p);
                     break;
                 }
             }
@@ -208,7 +673,7 @@ namespace CrimPrintService
             {
                 return;
             }
-            foreach (PrinterSetting p in Setting.Printers)
+            foreach (PrinterSetting p in _setting.Printers)
             {
                 if (listBoxPrinters.SelectedItem == p)
                 {
@@ -229,7 +694,7 @@ namespace CrimPrintService
             {
                 return;
             }
-            Setting.Printers.RemoveAt(listBoxPrinters.SelectedIndex);
+            _setting.Printers.RemoveAt(listBoxPrinters.SelectedIndex);
 
             Console.WriteLine(listBoxPrinters.SelectedIndex);
         }
@@ -237,6 +702,23 @@ namespace CrimPrintService
         private void buttonPrinters_Click(object sender, RoutedEventArgs e)
         {
             getPrinters();
+        }
+
+        private void Window_StateChanged(object sender, EventArgs e)
+        {
+            if (this.WindowState == WindowState.Minimized)
+            {
+                // 最小化到系统托盘
+                this.Hide();
+                // 或者可以选择 this.ShowInTaskbar = false; 来隐藏任务栏图标
+            }
+            else if (this.WindowState == WindowState.Normal)
+            {
+                // 从系统托盘恢复
+                this.Show();
+                // 恢复显示在任务栏
+                this.ShowInTaskbar = true;
+            }
         }
     }
 
@@ -249,7 +731,7 @@ namespace CrimPrintService
             if (command.Command == "print")
             {
                 #region print
-                Logger.InfoLog("print " + command.Seq + "  data:" + command.Data);
+                CrimLogger.InfoLog("print " + command.Seq + "  data:" + command.Data);
                 lock (this) {
 
                     if (command.Type == "image")
@@ -387,14 +869,14 @@ namespace CrimPrintService
                     {
                         try
                         {
-                            // Logger.InfoLog("同步信息号量");
+                            // CrimLogger.InfoLog("同步信息号量");
                             //同步信息号量  
                             Monitor.Enter(PrintQueueMap[item]);
 
                             // 这儿需要处理其他打印格式
                             PrintImageQueue(item, PrintQueueMap[item], (str) => {
                                 Monitor.Exit(PrintQueueMap[item]);
-                                // Logger.InfoLog("结束同步:" + str);
+                                // CrimLogger.InfoLog("结束同步:" + str);
                             });
 
                             //没有任务，休息3秒钟 
@@ -402,7 +884,7 @@ namespace CrimPrintService
                         }
                         catch (Exception ex)
                         {
-                            Logger.InfoLog(ex.ToString());
+                            CrimLogger.InfoLog(ex.ToString());
                             Monitor.Exit(PrintQueueMap[item]);
                             //没有任务，休息1秒钟 
                             Thread.Sleep(1000);
@@ -461,7 +943,7 @@ namespace CrimPrintService
             // 开始打印事件
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
-                Logger.InfoLog("print begin" );
+                CrimLogger.InfoLog("print begin" );
                 //WsResponse<string> br = new WsResponse<string>();
                 //br.Data = "begin";
                 //Send(JsonConvert.SerializeObject(br));
@@ -470,7 +952,7 @@ namespace CrimPrintService
             // 结束打印事件
             printDoc.EndPrint += (object sender, PrintEventArgs e) =>
             {
-                Logger.InfoLog("print end ");
+                CrimLogger.InfoLog("print end ");
                 //WsResponse<string> er = new WsResponse<string>();
                 //er.Data = "end";
                 //Send(JsonConvert.SerializeObject(er));
@@ -482,49 +964,16 @@ namespace CrimPrintService
             printDoc.PrintPage += (object sender, PrintPageEventArgs e) =>
             {
                 // inch
-                int x = toInchX100(printerSetting.MarginLeft);
-                int y = toInchX100(printerSetting.MarginTop);
+                int x = PageUtils.ToInchX100(printerSetting.MarginLeft);
+                int y = PageUtils.ToInchX100(printerSetting.MarginTop);
                 // inch
-                int xr = toInchX100(printerSetting.MarginRight);
-                int yb = toInchX100(printerSetting.MarginBottom);
+                int xr = PageUtils.ToInchX100(printerSetting.MarginRight);
+                int yb = PageUtils.ToInchX100(printerSetting.MarginBottom);
 
                 int w = 300, h = 551;
-                switch (printerSetting.Paper)
-                {
-                    case "1":
-                        {
-                            w = 300; // 285; // 300* 0.95
-                            h = 511; // 485; // 511 * 0.95
-                            break;
-                        }
-
-                    case "2":
-                        {
-                            w = toInchX100(100);
-                            h = toInchX100(180);
-                            break;
-                        }
-                    case "4":
-                        {
-                            w = toInchX100(152.4);
-                            h = toInchX100(101.6);
-                            break;
-                        }
-                    case "5":
-                        {
-                            w = toInchX100(148);
-                            h = toInchX100(105);
-                            break;
-                        }
-                    case "3":
-                    case "9":
-                    default:
-                        {
-                            w = toInchX100(100);
-                            h = toInchX100(180);
-                        }
-                        break;
-                }
+                var pagerInch100 = PageUtils.PageToInchX100(printerSetting.Paper);
+                w = pagerInch100.Width;
+                h = pagerInch100.Height;
                 e.PageSettings.Margins.Left = 0;
                 e.PageSettings.Margins.Top = 0;
                 e.PageSettings.Margins.Bottom = 0;
@@ -537,6 +986,8 @@ namespace CrimPrintService
                 // KeyValuePair<string, string> image = imageList[page - 1];
                 // Image i = Image.FromFile(image);
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(command.Value);
+                // 设置超时时间为5000毫秒
+                // request.Timeout = 20000;
                 using (HttpWebResponse response = (HttpWebResponse)request.GetResponse()) //获得响应) 
                 {
                     if (response.StatusCode != HttpStatusCode.OK)
@@ -573,7 +1024,7 @@ namespace CrimPrintService
                                 e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
                             }
                         }
-                        Logger.InfoLog("printed " + command.Key + "  data:" + command.Value);
+                        CrimLogger.InfoLog("printed " + command.Key + "  data:" + command.Value);
 
 
                         // 通知服务器端
@@ -641,7 +1092,7 @@ namespace CrimPrintService
             if (printerSetting == null)
             {
                 // 未找到指定打印机
-                Logger.ErrorLog("未找到指定的打印机，请先确认配置");
+                CrimLogger.ErrorLog("未找到指定的打印机，请先确认配置");
                 return;
             }
 
@@ -659,7 +1110,7 @@ namespace CrimPrintService
             // 开始打印事件
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
-                Logger.InfoLog("print begin" + seq );
+                CrimLogger.InfoLog("print begin" + seq );
                 WsResponse<string> br = new WsResponse<string>();
                 br.Seq = seq;
                 br.Data = "begin";
@@ -669,7 +1120,7 @@ namespace CrimPrintService
             // 结束打印事件
             printDoc.EndPrint += (object sender, PrintEventArgs e) =>
             {
-                Logger.InfoLog("print end " + seq);
+                CrimLogger.InfoLog("print end " + seq);
                 WsResponse<string> er = new WsResponse<string>();
                 er.Seq = seq;
                 er.Data = "end";
@@ -681,49 +1132,16 @@ namespace CrimPrintService
             printDoc.PrintPage += (object sender, PrintPageEventArgs e) =>
             {
                 // inch
-                int x = toInchX100(printerSetting.MarginLeft);
-                int y = toInchX100(printerSetting.MarginTop);
+                int x = PageUtils.ToInchX100(printerSetting.MarginLeft);
+                int y = PageUtils.ToInchX100(printerSetting.MarginTop);
                 // inch
-                int xr = toInchX100(printerSetting.MarginRight);
-                int yb = toInchX100(printerSetting.MarginBottom);
+                int xr = PageUtils.ToInchX100(printerSetting.MarginRight);
+                int yb = PageUtils.ToInchX100(printerSetting.MarginBottom);
                 
                 int w = 300, h = 551;
-                switch (printerSetting.Paper)
-                {
-                    case "1":
-                        {
-                            w = 300; // 285; // 300* 0.95
-                            h = 511; // 485; // 511 * 0.95
-                            break;
-                        }
-
-                    case "2":
-                        {
-                            w = toInchX100(100);
-                            h = toInchX100(180);
-                            break;
-                        }
-                    case "4":
-                        {
-                            w = toInchX100(152.4);
-                            h = toInchX100(101.6);
-                            break;
-                        }
-                    case "5":
-                        {
-                            w = toInchX100(148);
-                            h = toInchX100(105);
-                            break;
-                        }
-                    case "3":
-                    case "9":
-                    default:
-                        {
-                            w = toInchX100(100);
-                            h = toInchX100(180);
-                        }
-                        break;
-                }
+                var pagerInch100 = PageUtils.PageToInchX100(printerSetting.Paper);
+                w = pagerInch100.Width;
+                h = pagerInch100.Height;
                 e.PageSettings.Margins.Left = 0;
                 e.PageSettings.Margins.Top = 0;
                 e.PageSettings.Margins.Bottom = 0;
@@ -736,6 +1154,8 @@ namespace CrimPrintService
                 KeyValuePair<string, string> image = imageList[page - 1];
                 // Image i = Image.FromFile(image);
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(image.Value);
+                // 设置超时时间为5000毫秒
+                // request.Timeout = 20000;
                 using (HttpWebResponse response = (HttpWebResponse)request.GetResponse()) //获得响应) 
                 {
                     if (response.StatusCode != HttpStatusCode.OK)
@@ -770,7 +1190,7 @@ namespace CrimPrintService
                                 e.Graphics.DrawImage(img, e.PageSettings.HardMarginX + x, e.PageSettings.HardMarginY + y, w, h);
                             }
                         }
-                        Logger.InfoLog("printed " + image.Key + "  data:" + image.Value);
+                        CrimLogger.InfoLog("printed " + image.Key + "  data:" + image.Value);
 
                         // 通知服务器端
                         PrintStateNotice.Notice(PrintSetting.NoticeUrl, image.Key, image.Value);
@@ -815,11 +1235,6 @@ namespace CrimPrintService
             printImage(seq, printer, imageList);
         }
 
-        int toInchX100(double mm)
-        {
-            return (int)(mm * 3.937);
-        }
-
         protected void printHtml(string seq, string html)
         {
 
@@ -843,7 +1258,7 @@ namespace CrimPrintService
             catch (Exception ex)
             {
                 // 发送消息异常
-                Logger.ErrorLog("发送消息异常", ex);
+                CrimLogger.ErrorLog("发送消息异常", ex);
             }
         }
     }
@@ -890,18 +1305,6 @@ namespace CrimPrintService
             get;
             set;
         }
-    }
-
-    class PrintQueueItem{
-
-        public string Seq { get; set; }
-
-        public string Type { get; set; }
-
-        public string Key { get; set; }
-
-        public string Value { get; set; }
-
     }
 }
 

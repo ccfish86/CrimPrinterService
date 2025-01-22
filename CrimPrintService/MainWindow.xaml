@@ -5,12 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CrimPrintService"
         mc:Ignorable="d"
-        Title="云打印-服务配置" Height="450" Width="900" Loaded="Window_Loaded" ResizeMode="NoResize">
-    <StackPanel x:Name="StackPanelMain" VerticalAlignment="Top" Width="900" Height="400" Orientation="Horizontal">
+        Title="云打印-服务::泰山专用" Height="550" Width="900" Loaded="Window_Loaded" ResizeMode="CanMinimize" StateChanged="Window_StateChanged">
+    <StackPanel x:Name="StackPanelMain" VerticalAlignment="Top" Width="900" Height="500" Orientation="Horizontal">
 
-        <StackPanel VerticalAlignment="Top" Width="200" Height="400" Orientation="Vertical">
+        <StackPanel VerticalAlignment="Top" Width="200" Height="500" Orientation="Vertical">
             <Label>打印机配置</Label>
-            <ListBox x:Name="listBoxPrinters" Width="200" Height="350" ItemsSource="{Binding Mode=TwoWay,Path=Printers}" SelectedValue="{Binding Path=SelectedID}" 
+            <ListBox x:Name="listBoxPrinters" Width="200" Height="450" ItemsSource="{Binding Mode=TwoWay,Path=Printers}" SelectedValue="{Binding Path=SelectedID}" 
                  SelectedValuePath="ID" SelectionChanged="listBoxPrinters_Selected">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
@@ -29,7 +29,7 @@
                 </ListBox.ContextMenu>
             </ListBox>
         </StackPanel>
-        <StackPanel VerticalAlignment="Top" Width="700" Height="400" Orientation="Vertical">
+        <StackPanel VerticalAlignment="Top" Width="700" Height="500" Orientation="Vertical">
             <Grid x:Name="wsGrid" Margin="0 20 0 0" >
                 <Grid.Resources>
                     <Style TargetType="RowDefinition">
@@ -38,16 +38,47 @@
                 </Grid.Resources>
                 <Grid.RowDefinitions>
                     <RowDefinition></RowDefinition>
-                    <!--  <RowDefinition></RowDefinition> -->
+                    <RowDefinition></RowDefinition>
+                    <RowDefinition></RowDefinition>
                 </Grid.RowDefinitions>
 
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="100" ></ColumnDefinition>
-                    <ColumnDefinition Width="200*"></ColumnDefinition>
+                    <ColumnDefinition Width="23*"></ColumnDefinition>
+                    <ColumnDefinition Width="52*"/>
                 </Grid.ColumnDefinitions>
+                <Label x:Name="labelPort" Grid.Column="0" Content="本地端口号" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="30,0,0,0" />
+                <StackPanel VerticalAlignment="Center" Grid.Column="1" Orientation="Horizontal" Grid.ColumnSpan="2">
+                    <TextBox x:Name="textBoxPort" HorizontalAlignment="Left"  TextWrapping="Wrap"  Width="100" VerticalAlignment="Center" IsEnabled="{Binding ElementName=textBoxLocal,Path=IsChecked}" Text="{Binding Mode=TwoWay,Path=Port}"/>
+                    <Label x:Name="localLabel" HorizontalAlignment="Left" VerticalAlignment="Center"  Content="启用"  />
+                    <CheckBox x:Name="textBoxLocal"  HorizontalAlignment="Left"  VerticalAlignment="Center" IsChecked="{Binding Mode=TwoWay,Path=StartLocal}"/>
+                </StackPanel>
 
-                <TextBox x:Name="textBoxPort" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="100" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=Port}"/>
-                <Label x:Name="labelPort" Grid.Row="0" Grid.Column="0" Content="端口号" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                <Label x:Name="labelUrl" Grid.Row="1" Grid.Column="0" Content="服务地址" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="42,0,0,0" />
+                <StackPanel VerticalAlignment="Center" Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Grid.ColumnSpan="2">
+                    <StackPanel.Resources>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="black"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Path=State}" Value="1">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Path=State}" Value="3">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Path=State}" Value="2">
+                                    <Setter Property="Foreground" Value="Green"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Resources>
+                    <TextBox x:Name="textBoxUrl"  HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="350" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=Url}"/>
+                    <TextBlock Margin="10 0" Text="{Binding Path=State,Converter={StaticResource ConnectStateToDisplayConvert}}"></TextBlock>
+                </StackPanel>
+
+                <Label x:Name="labelAccessKey" Grid.Row="2" Grid.Column="0" Content="KEY" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="69,0,0,0" />
+                <TextBox x:Name="textBoxAccessKey" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Height="24"  TextWrapping="Wrap"  Width="350" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=Key}" Grid.ColumnSpan="2"/>
+
                 <!--<TextBox x:Name="textBoxNotice" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Height="23"  TextWrapping="Wrap"  Width="550" VerticalAlignment="Center" Text="{Binding Mode=TwoWay,Path=NoticeUrl}"/>-->
                 <!-- <Label x:Name="labelNotice" Grid.Row="1" Grid.Column="0" Content="打印完通知" HorizontalAlignment="Right"  VerticalAlignment="Center" /> -->
             </Grid>
@@ -84,15 +115,20 @@
                   Height="23" Width="180" SelectedValue="{Binding Mode=TwoWay,Path=Printer}" />
 
                 <Button x:Name="buttonPrinters" Content="刷新" Grid.Row="1" Grid.Column="1" Width="60" Margin="185 6 6 6"  HorizontalAlignment="Left" Click="buttonPrinters_Click" />
-                
+
                 <ComboBox x:Name="combBoxPaper"  Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Height="23" Width="180" 
                   SelectedValuePath="Tag" 
                   SelectedValue="{Binding Mode=TwoWay,Path=Paper}" >
+                    <ComboBoxItem Content="PDF A4" Tag="A4" />
+                    <ComboBoxItem Content="PDF A5" Tag="A5" />
+                    <ComboBoxItem Content="PDF A6" Tag="A6"/>
+                    <ComboBoxItem Content="6寸 152x102" Tag="I6"/>
+                    <ComboBoxItem Content="7寸 178x127" Tag="I7"/>
+                    <ComboBoxItem Content="8寸 203x152" Tag="I8"/>
                     <ComboBoxItem Content="通用 76x130" Tag="1" />
+                    <ComboBoxItem Content="通用 40x30mm" Tag="4" />
                     <ComboBoxItem Content="邮政 100x180" Tag="2"/>
                     <ComboBoxItem Content="其他 100x150" Tag="3"/>
-                    <ComboBoxItem Content="6寸 152.4x101.6" Tag="4"/>
-                    <ComboBoxItem Content="A6 148*105" Tag="5"/>
                 </ComboBox>
                 <StackPanel VerticalAlignment="Center"  Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
                     <Label>上</Label>
@@ -106,13 +142,13 @@
                 </StackPanel>
 
                 <StackPanel VerticalAlignment="Center"  Grid.Row="4" Grid.Column="1" Orientation="Horizontal">
-                    <CheckBox HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" IsChecked="{Binding Mode=TwoWay,Path=AutoSize}"/>
-                    <Label>自适应</Label>
+                    <CheckBox HorizontalAlignment="Left" VerticalAlignment="Center" IsChecked="{Binding Mode=TwoWay,Path=AutoSize}"/>
+                    <Label>无边距[照片/快递单]</Label>
                 </StackPanel>
 
                 <StackPanel VerticalAlignment="Center"  Grid.Row="5" Grid.Column="1" Orientation="Horizontal">
-                    <RadioButton GroupName="radioButtonLandscape" HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" Content="横向" IsChecked="{Binding Mode=TwoWay,Path=Landscape,Converter={StaticResource BoolRadioConverter}}"/>
-                    <RadioButton GroupName="radioButtonLandscape" HorizontalAlignment="Left" Height="23" VerticalAlignment="Center" Content="纵向" IsChecked="{Binding Mode=TwoWay,Path=Landscape,Converter={StaticResource InverseBoolRadioConverter}}">
+                    <RadioButton GroupName="radioButtonLandscape" HorizontalAlignment="Left"  VerticalAlignment="Center" Content="横向" IsChecked="{Binding Mode=TwoWay,Path=Landscape,Converter={StaticResource BoolRadioConverter}}"/>
+                    <RadioButton GroupName="radioButtonLandscape" HorizontalAlignment="Left"  VerticalAlignment="Center" Content="纵向" IsChecked="{Binding Mode=TwoWay,Path=Landscape,Converter={StaticResource InverseBoolRadioConverter}}">
                     </RadioButton>
                 </StackPanel>
 

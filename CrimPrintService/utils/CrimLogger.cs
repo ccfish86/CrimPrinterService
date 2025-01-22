@@ -5,9 +5,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 [assembly: log4net.Config.XmlConfigurator(ConfigFile ="log4net.config", Watch = true)]
-namespace CrimPrintService
+namespace CrimPrintService.utils
 {
-    public class Logger
+    public class CrimLogger
     {
 
         public static void InfoLog(object msg)
