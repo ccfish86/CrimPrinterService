@@ -58,6 +58,10 @@ namespace TaishanPrintService.utils
                     {
                         return new PageInch100(ToInchX100(40), ToInchX100(30));
                     }
+                case "5":
+                    {
+                        return new PageInch100(ToInchX100(50), ToInchX100(70));
+                    }
                 default:
                 {
                     return new PageInch100(ToInchX100(76), ToInchX100(130));

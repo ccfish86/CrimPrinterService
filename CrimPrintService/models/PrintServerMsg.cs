@@ -18,5 +18,8 @@ namespace TaishanPrintService.models
         public string Sender { get; set; }
         [JsonProperty("type")]
         public int Type { get; set; }
+
+        [JsonProperty("seq")]
+        public string Seq { get; set; }
     }
 }

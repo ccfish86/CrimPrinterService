@@ -23,6 +23,8 @@ using Spire.Pdf.Print;
 using CrimPrintService.utils;
 using System.Reflection;
 using System.Threading.Tasks;
+using System.Text;
+using System.IO.Compression;
 
 namespace CrimPrintService
 {
@@ -68,12 +70,26 @@ namespace CrimPrintService
                 {
                     this.Show();
                     this.Activate();
+                    // 窗口置顶,最大化窗口
+                    this.Topmost = true;
+                    this.WindowState = WindowState.Normal;
                 }
             }
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            // 确认窗口
+            if (!ApplicationVariable.DoubleExeced)
+            {
+                MessageBoxResult result = MessageBox.Show("确定要退出吗？\n退出后将无法正常打印文件", "提示", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Cancel)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
             base.OnClosing(e);
 
             // 关闭窗口时同时退出应用程序
@@ -86,7 +102,7 @@ namespace CrimPrintService
 
             //处理HttpWebRequest访问https有安全证书的问题（ 请求被中止: 未能创建 SSL/TLS 安全通道。）
             ServicePointManager.ServerCertificateValidationCallback += (s, cert, chain, sslPolicyErrors) => true;
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+            ServicePointManager.SecurityProtocol = GetSupportedTlsProtocols();
 
             // 将版本号转换为字符串格式，并添加"v"前缀
             Version version = Assembly.GetExecutingAssembly().GetName().Version;
@@ -97,13 +113,14 @@ namespace CrimPrintService
         private CustomSetting loadSetting()
         {
             CrimLogger.InfoLog("load settings");
-            if (File.Exists("setting.json")) {
+            if (File.Exists("setting.json"))
+            {
                 string str = File.ReadAllText("setting.json");
                 return JsonConvert.DeserializeObject<CustomSetting>(str);
             }
 
             var config = new CustomSetting();
-            config.Url = "wss://climber.dongyuejihua.com/ws/p/stream";
+            config.Url = "wss://cli.ccfish.net/ws/p/stream";
             config.Key = "";
             // config.MarginTop = 0;
             // config.MarginLeft = 0;
@@ -124,7 +141,8 @@ namespace CrimPrintService
                 result.Add(item);
                 Console.WriteLine(item);
             }
-            if (_setting.Printers == null || _setting.Printers.Count == 0) {
+            if (_setting.Printers == null || _setting.Printers.Count == 0)
+            {
                 if (_setting.Printers == null)
                 {
                     _setting.Printers = new ObservableCollection<PrinterSetting>();
@@ -166,11 +184,11 @@ namespace CrimPrintService
             this.connectServer();
         }
 
-       void connectServer()
+        void connectServer()
         {
             // 连接服务器
             _setting.Started = false;
-            if (_webSocket != null&&_webSocket.ReadyState == WebSocketState.Open)
+            if (_webSocket != null && _webSocket.ReadyState == WebSocketState.Open)
             {
                 _setting.State = 2;
                 _setting.Started = true;
@@ -181,7 +199,7 @@ namespace CrimPrintService
                 _setting.State = 1;
                 var url = string.Format("{0}?key={1}", this._setting.Url, this._setting.Key);
                 _webSocket = new WebSocket(url);
-                _webSocket.SslConfiguration.EnabledSslProtocols = SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12;
+                _webSocket.SslConfiguration.EnabledSslProtocols = GetSupportedSslProtocols();
 
                 _webSocket.WaitTime = TimeSpan.FromSeconds(30);
                 _webSocket.EmitOnPing = true;
@@ -189,7 +207,8 @@ namespace CrimPrintService
                 _webSocket.OnOpen += _webSocket_OnOpen;
                 _webSocket.OnError += _webSocket_OnError; ;
                 _webSocket.OnClose += this.OnWsClosed;
-                try { 
+                try
+                {
                     _webSocket.Connect();
                 }
                 catch (Exception ex)
@@ -240,7 +259,7 @@ namespace CrimPrintService
         {
             CrimLogger.InfoLog("收到消息" + e.Data);
             // 转json
-            PrintServerMsg printMsg = JsonConvert.DeserializeObject< PrintServerMsg>(e.Data);
+            PrintServerMsg printMsg = JsonConvert.DeserializeObject<PrintServerMsg>(e.Data);
             if (printMsg.Type == 5)
             {
                 // 打印PDF
@@ -257,6 +276,110 @@ namespace CrimPrintService
                 {
                     var imgMsg = JsonConvert.DeserializeObject<PrintServerImgMsg>(printMsg.Data);
                     this.doPrintImg(imgMsg);
+                }
+            }
+            else if (printMsg.Type == 97)
+            {
+                // 上传日志
+                try
+                {
+                    // 默认使用当前月份，但如果有指定月份则使用指定的
+                    string targetMonth = DateTime.Now.ToString("yyyyMM");
+
+                    // 检查是否有指定月份参数
+                    if (!string.IsNullOrEmpty(printMsg.Data))
+                    {
+                        try
+                        {
+                            // 尝试解析数据中的月份参数
+                            var requestData = JsonConvert.DeserializeObject<dynamic>(printMsg.Data);
+                            if (requestData.month != null)
+                            {
+                                targetMonth = requestData.month.ToString();
+                                CrimLogger.InfoLog($"使用指定月份: {targetMonth}");
+                            }
+                        }
+                        catch
+                        {
+                            // 如果解析失败，使用默认的当前月份
+                            CrimLogger.InfoLog("解析月份参数失败，使用当前月份");
+                        }
+                    }
+
+                    var logFolderPath = GetLogFolderPath(targetMonth);
+
+                    CrimLogger.InfoLog($"收到上传日志请求，月份: {targetMonth}，路径: {logFolderPath}");
+
+                    // 检查目录是否存在
+                    if (!Directory.Exists(logFolderPath))
+                    {
+                        PrintServerAck notFoundResponse = new PrintServerAck();
+                        notFoundResponse.Type = 98;
+                        notFoundResponse.Seq = printMsg.Seq;
+                        notFoundResponse.Code = "404";
+                        notFoundResponse.Message = $"月份 {targetMonth} 的日志文件夹不存在";
+                        notFoundResponse.Data = "";
+
+                        _webSocket.Send(JsonConvert.SerializeObject(notFoundResponse));
+                        CrimLogger.InfoLog($"日志文件夹不存在: {logFolderPath}");
+                        return;
+                    }
+
+                    // 检查目录中是否有文件
+                    var files = Directory.GetFiles(logFolderPath, "*", SearchOption.AllDirectories);
+                    if (files.Length == 0)
+                    {
+                        PrintServerAck emptyResponse = new PrintServerAck();
+                        emptyResponse.Type = 98;
+                        emptyResponse.Seq = printMsg.Seq;
+                        emptyResponse.Code = "204";
+                        emptyResponse.Message = $"月份 {targetMonth} 的日志文件夹为空";
+                        emptyResponse.Data = "";
+
+                        _webSocket.Send(JsonConvert.SerializeObject(emptyResponse));
+                        CrimLogger.InfoLog($"日志文件夹为空: {logFolderPath}");
+                        return;
+                    }
+
+                    CrimLogger.InfoLog($"找到 {files.Length} 个日志文件，开始压缩...");
+
+                    // 压缩日志文件夹并转换为base64
+                    string base64LogData = CompressLogFolderToBase64(logFolderPath);
+
+                    PrintServerAck response = new PrintServerAck();
+                    response.Type = 98;
+                    response.Seq = printMsg.Seq; // 保持请求的序列号
+
+                    if (!string.IsNullOrEmpty(base64LogData))
+                    {
+                        response.Message = $"日志压缩成功 - 月份: {targetMonth}，文件数: {files.Length}";
+                        response.Data = base64LogData;
+                        CrimLogger.InfoLog($"日志压缩上传成功 - 月份: {targetMonth}，文件数: {files.Length}");
+                    }
+                    else
+                    {
+                        response.Code = "500";
+                        response.Message = $"月份 {targetMonth} 的日志文件压缩失败，可能由于文件正被使用";
+                        response.Data = "";
+                        CrimLogger.InfoLog($"月份 {targetMonth} 的日志压缩失败");
+                    }
+
+                    // 发送响应
+                    _webSocket.Send(JsonConvert.SerializeObject(response));
+                }
+                catch (Exception ex)
+                {
+                    CrimLogger.ErrorLog("处理上传日志请求异常", ex);
+
+                    // 发送错误响应
+                    PrintServerAck errorResponse = new PrintServerAck();
+                    errorResponse.Type = 98;
+                    errorResponse.Seq = printMsg.Seq;
+                    errorResponse.Code = "500";
+                    errorResponse.Message = "内部错误: " + ex.Message;
+                    errorResponse.Data = "";
+
+                    _webSocket.Send(JsonConvert.SerializeObject(errorResponse));
                 }
             }
             else if (printMsg.Type == 99)
@@ -310,7 +433,7 @@ namespace CrimPrintService
             if (printerSetting == null)
             {
                 CrimLogger.ErrorLog("未找到指定的打印机" + printer);
-                MessageBox.Show("未找到指定的打印机\n 请追加ID=" + printer + "的打印机");
+                // MessageBox.Show("未找到指定的打印机\n 请追加ID=" + printer + "的打印机");
                 return null;
             }
             return printerSetting;
@@ -319,7 +442,7 @@ namespace CrimPrintService
         private void doPrintExpress(PrintServerPdfMsg expressMsg)
         {
             //var sw = new Stopwatch();
-            CrimLogger.InfoLog("print " + expressMsg.ID + " "+ expressMsg.PrinterID);
+            CrimLogger.InfoLog("print " + expressMsg.ID + " " + expressMsg.PrinterID);
             var printerSetting = getPrinterSetting(expressMsg.PrinterID);
             if (printerSetting == null)
             {
@@ -405,7 +528,7 @@ namespace CrimPrintService
         /// PDF打印
         /// </summary>
         /// <param name="pdfMsg"></param>
-        private void doPrintPdf(PrintServerPdfMsg pdfMsg) 
+        private void doPrintPdf(PrintServerPdfMsg pdfMsg)
         {
             //var sw = new Stopwatch();
             var printerSetting = getPrinterSetting(pdfMsg.PrinterID);
@@ -423,7 +546,8 @@ namespace CrimPrintService
                 _webSocket.Send(JsonConvert.SerializeObject(er));
                 return;
             }
-            foreach (var pdfUrl in pdfMsg.Files) {
+            foreach (var pdfUrl in pdfMsg.Files)
+            {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(pdfUrl);
                 // 设置超时时间为5000毫秒
                 // request.Timeout = 20000;
@@ -453,7 +577,8 @@ namespace CrimPrintService
                     {
                         using (var stream = response.GetResponseStream())
                         {
-                            using (PdfDocument pdfDoc = new PdfDocument()) { 
+                            using (PdfDocument pdfDoc = new PdfDocument())
+                            {
                                 using (MemoryStream ms = new MemoryStream())
                                 {
                                     stream.CopyTo(ms);
@@ -461,7 +586,8 @@ namespace CrimPrintService
                                 }
                                 // 打印参数
                                 PdfPrintSettings printSettings = new PdfPrintSettings();
-                                if (printerSetting.Paper == "A4") { 
+                                if (printerSetting.Paper == "A4")
+                                {
                                     printSettings.PaperSize = PdfPaperSizes.A4;
                                     printSettings.Landscape = printerSetting.Landscape;
                                 }
@@ -475,13 +601,13 @@ namespace CrimPrintService
                                     printSettings.PaperSize = PdfPaperSizes.A6;
                                     printSettings.Landscape = printerSetting.Landscape;
                                 }
-                                else 
+                                else
                                 {
                                     var esize = PageUtils.PageToInchX100(printerSetting.Paper);
                                     printSettings.PaperSize = new PaperSize("USER", esize.Width, esize.Height);
                                 }
                                 printSettings.PrinterName = printerSetting.Printer;
-                                printSettings.BeginPrint  += (object sender, PrintEventArgs e) =>
+                                printSettings.BeginPrint += (object sender, PrintEventArgs e) =>
                                 {
                                     // 打印开始事件
                                     CrimLogger.InfoLog("print begin [" + pdfMsg.ID + "]: " + pdfUrl);
@@ -524,12 +650,17 @@ namespace CrimPrintService
 
         private void OnWsClosed(object sender, CloseEventArgs e)
         {
-            if (pingTimer != null) { 
+            if (pingTimer != null)
+            {
                 pingTimer.Dispose();
                 pingTimer = null;
             }
 
-            if (e.Code == 1006) { 
+            // 设置连接状态为断开
+            wsopen = false;
+
+            if (e.Code == 1006)
+            {
                 _setting.State = 3;
             }
             else
@@ -538,32 +669,306 @@ namespace CrimPrintService
             }
             CrimLogger.InfoLog("已断开:" + e.Code);
 
-            // 后台重连
-            Thread thread = new Thread(reconnect);
-            thread.IsBackground = true;
-            thread.Start();
+            // 只有在非正常关闭时才重连
+            if (e.Code != 1000) // 1000 是正常关闭代码
+            {
+                // 后台重连
+                Thread thread = new Thread(reconnect);
+                thread.IsBackground = true;
+                thread.Start();
+            }
         }
 
         private void reconnect()
         {
             var reconnTtl = 5000;
-            while(wsopen && _webSocket.ReadyState != WebSocketState.Open) { 
+            const int maxReconnTtl = 60000; // 最大重连间隔60秒
+
+            while (!wsopen) // 只要未手动关闭就持续重连
+            {
                 try
                 {
                     _setting.State = 1;
-                    CrimLogger.InfoLog("重连");
+                    CrimLogger.InfoLog("重连中...");
                     Thread.Sleep(reconnTtl);
-                    _webSocket.Connect();
-                    reconnTtl = 5000;
+
+                    // 清理旧的WebSocket对象
+                    if (_webSocket != null)
+                    {
+                        try
+                        {
+                            _webSocket.OnMessage -= _webSocket_OnMessage;
+                            _webSocket.OnOpen -= _webSocket_OnOpen;
+                            _webSocket.OnError -= _webSocket_OnError;
+                            _webSocket.OnClose -= this.OnWsClosed;
+                            _webSocket.Close();
+                        }
+                        catch (Exception cleanEx)
+                        {
+                            CrimLogger.ErrorLog("清理旧WebSocket异常", cleanEx);
+                        }
+                    }
+
+                    // 重新创建WebSocket连接
+                    if (!_setting.Url.IsNullOrEmpty() && !_setting.Key.IsNullOrEmpty())
+                    {
+                        var url = string.Format("{0}?key={1}", _setting.Url, _setting.Key);
+                        _webSocket = new WebSocket(url);
+                        _webSocket.SslConfiguration.EnabledSslProtocols = SslProtocols.Tls13 | SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12;
+                        _webSocket.WaitTime = TimeSpan.FromSeconds(30);
+                        _webSocket.EmitOnPing = true;
+
+                        // 重新绑定事件处理器
+                        _webSocket.OnMessage += _webSocket_OnMessage;
+                        _webSocket.OnOpen += _webSocket_OnOpen;
+                        _webSocket.OnError += _webSocket_OnError;
+                        _webSocket.OnClose += this.OnWsClosed;
+
+                        _webSocket.Connect();
+                    }
+
+                    reconnTtl = 5000; // 重连成功后重置间隔
+                    CrimLogger.InfoLog("重连尝试完成");
                     break;
                 }
                 catch (Exception ex)
                 {
-                    reconnTtl = reconnTtl * 2;
-                    CrimLogger.InfoLog("重连失败:" + ex.Message);
+                    reconnTtl = Math.Min(reconnTtl * 2, maxReconnTtl); // 指数退避，但不超过最大值
+                    CrimLogger.InfoLog($"重连失败，{reconnTtl / 1000}秒后重试: {ex.Message}");
                     CrimLogger.ErrorLog("重连失败", ex);
                 }
             }
+        }
+
+        /// <summary>
+        /// 压缩指定日志文件夹为zip并转换为base64字符串
+        /// </summary>
+        /// <param name="logFolderPath">日志文件夹路径</param>
+        /// <returns>压缩文件的base64字符串</returns>
+        private string CompressLogFolderToBase64(string logFolderPath)
+        {
+            try
+            {
+                CrimLogger.InfoLog($"开始压缩日志文件夹: {logFolderPath}");
+
+                // 检查文件夹是否存在
+                if (!Directory.Exists(logFolderPath))
+                {
+                    CrimLogger.InfoLog($"日志文件夹不存在: {logFolderPath}");
+                    return string.Empty;
+                }
+
+                // 创建临时zip文件
+                string tempZipPath = Path.Combine(Path.GetTempPath(), $"logs_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
+
+                try
+                {
+                    // 使用ZipArchive手动添加文件，可以更好地处理文件锁定问题
+                    using (var zipArchive = ZipFile.Open(tempZipPath, ZipArchiveMode.Create))
+                    {
+                        CompressDirectoryRecursively(logFolderPath, zipArchive, logFolderPath);
+                    }
+
+                    // 读取zip文件并转换为base64
+                    byte[] zipBytes = File.ReadAllBytes(tempZipPath);
+                    string base64String = Convert.ToBase64String(zipBytes);
+
+                    CrimLogger.InfoLog($"成功压缩日志文件夹，压缩后大小: {zipBytes.Length} 字节");
+
+                    return base64String;
+                }
+                finally
+                {
+                    // 清理临时文件
+                    try
+                    {
+                        if (File.Exists(tempZipPath))
+                        {
+                            File.Delete(tempZipPath);
+                        }
+                    }
+                    catch (Exception cleanEx)
+                    {
+                        CrimLogger.ErrorLog($"清理临时文件失败: {tempZipPath}", cleanEx);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                CrimLogger.ErrorLog($"压缩日志文件夹失败: {logFolderPath}", ex);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 递归压缩目录，处理文件锁定问题
+        /// </summary>
+        /// <param name="sourceDir">源目录</param>
+        /// <param name="zipArchive">zip归档对象</param>
+        /// <param name="basePath">基础路径</param>
+        private void CompressDirectoryRecursively(string sourceDir, ZipArchive zipArchive, string basePath)
+        {
+            try
+            {
+                // 获取目录中的所有文件
+                string[] files = Directory.GetFiles(sourceDir);
+                foreach (string filePath in files)
+                {
+                    try
+                    {
+                        // 计算在zip中的相对路径
+                        string relativePath = GetRelativePath(basePath, filePath);
+
+                        // 尝试复制文件内容，处理文件锁定问题
+                        CopyFileToZip(filePath, relativePath, zipArchive);
+                    }
+                    catch (Exception fileEx)
+                    {
+                        CrimLogger.ErrorLog($"压缩文件失败: {filePath}", fileEx);
+                        // 继续处理其他文件
+                    }
+                }
+
+                // 递归处理子目录
+                string[] directories = Directory.GetDirectories(sourceDir);
+                foreach (string dirPath in directories)
+                {
+                    CompressDirectoryRecursively(dirPath, zipArchive, basePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                CrimLogger.ErrorLog($"递归压缩目录失败: {sourceDir}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 安全地将文件复制到zip归档中，处理文件锁定问题
+        /// </summary>
+        /// <param name="sourceFilePath">源文件路径</param>
+        /// <param name="entryName">在zip中的条目名称</param>
+        /// <param name="zipArchive">zip归档对象</param>
+        private void CopyFileToZip(string sourceFilePath, string entryName, ZipArchive zipArchive)
+        {
+            const int maxRetries = 3;
+            const int retryDelayMs = 100;
+
+            for (int attempt = 0; attempt < maxRetries; attempt++)
+            {
+                try
+                {
+                    // 使用共享读取模式打开文件，允许其他进程继续写入
+                    using (var sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    {
+                        // 创建zip条目
+                        var zipEntry = zipArchive.CreateEntry(entryName, CompressionLevel.Optimal);
+
+                        // 复制文件内容到zip条目
+                        using (var zipEntryStream = zipEntry.Open())
+                        {
+                            sourceStream.CopyTo(zipEntryStream);
+                        }
+                    }
+
+                    // 如果成功，跳出重试循环
+                    break;
+                }
+                catch (IOException ioEx) when (attempt < maxRetries - 1)
+                {
+                    // 如果是IO异常且还有重试机会，等待后重试
+                    CrimLogger.InfoLog($"文件被占用，第{attempt + 1}次重试: {sourceFilePath}");
+                    Thread.Sleep(retryDelayMs * (attempt + 1)); // 递增延迟
+                }
+                catch (UnauthorizedAccessException uaEx) when (attempt < maxRetries - 1)
+                {
+                    // 如果是访问权限异常且还有重试机会，等待后重试
+                    CrimLogger.InfoLog($"文件访问被拒绝，第{attempt + 1}次重试: {sourceFilePath}");
+                    Thread.Sleep(retryDelayMs * (attempt + 1));
+                }
+            }
+        }
+        public string GetRelativePath(string relativeTo, string path)
+        {
+            var uri = new Uri(relativeTo);
+            var rel = Uri.UnescapeDataString(uri.MakeRelativeUri(new Uri(path)).ToString()).Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            if (rel.Contains(Path.DirectorySeparatorChar.ToString()) == false)
+            {
+                rel = $".{Path.DirectorySeparatorChar}{rel}";
+            }
+            return rel;
+        }
+        /// <summary>
+        /// 获取当前可执行文件所在目录的日志路径
+        /// </summary>
+        /// <param name="monthFolder">月份文件夹名称，如"202509"</param>
+        /// <returns>完整的日志文件夹路径</returns>
+        private string GetLogFolderPath(string monthFolder)
+        {
+            // 获取当前执行目录
+            string currentDir = AppDomain.CurrentDomain.BaseDirectory;
+            string logPath = Path.Combine(currentDir, "log", monthFolder);
+
+            CrimLogger.InfoLog($"日志文件夹路径: {logPath}");
+            return logPath;
+        }
+
+        /// <summary>
+        /// 获取包含TLS 1.3的安全协议集合
+        /// </summary>
+        /// <returns>支持的TLS协议</returns>
+        private SecurityProtocolType GetSupportedTlsProtocols()
+        {
+            var protocols = SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+
+            // 在.NET Framework 4.8+中支持TLS 1.3
+            try
+            {
+                // TLS 1.3 的数值常量是 12288 (0x3000)
+                if (Enum.IsDefined(typeof(SecurityProtocolType), 12288))
+                {
+                    protocols |= (SecurityProtocolType)12288; // TLS 1.3
+                    CrimLogger.InfoLog("支持TLS 1.3协议");
+                }
+                else
+                {
+                    CrimLogger.InfoLog("当前.NET框架版本不支持TLS 1.3");
+                }
+            }
+            catch (Exception ex)
+            {
+                CrimLogger.ErrorLog("检查TLS 1.3支持时发生错误", ex);
+            }
+
+            return protocols;
+        }
+
+        /// <summary>
+        /// 获取包含TLS 1.3的SSL协议集合(用于WebSocket)
+        /// </summary>
+        /// <returns>支持的SSL协议</returns>
+        private SslProtocols GetSupportedSslProtocols()
+        {
+            var protocols = SslProtocols.Default | SslProtocols.Tls11 | SslProtocols.Tls12;
+
+            try
+            {
+                // TLS 1.3 在SslProtocols中的数值常量是 12288 (0x3000)
+                if (Enum.IsDefined(typeof(SslProtocols), 12288))
+                {
+                    protocols |= (SslProtocols)12288; // TLS 1.3
+                    CrimLogger.InfoLog("支持WebSocket TLS 1.3协议");
+                }
+                else
+                {
+                    CrimLogger.InfoLog("当前.NET框架版本不支持WebSocket TLS 1.3");
+                }
+            }
+            catch (Exception ex)
+            {
+                CrimLogger.ErrorLog("检查WebSocket TLS 1.3支持时发生错误", ex);
+            }
+
+            return protocols;
         }
 
         private WebSocket _webSocket;
@@ -604,7 +1009,7 @@ namespace CrimPrintService
 
         private void buttonStop_Click(object sender, RoutedEventArgs e)
         {
-            wsopen = false;
+            // 先设置停止状态，然后关闭连接
             this.WsClose();
 
             if (wssv != null)
@@ -615,8 +1020,23 @@ namespace CrimPrintService
         }
         public void WsClose()
         {
-            this._webSocket.OnClose -= this.OnWsClosed;
-            this._webSocket.Close(CloseStatusCode.Normal, "close");
+            wsopen = false; // 设置为手动关闭状态，阻止重连
+
+            if (_webSocket != null)
+            {
+                // 移除事件处理器以避免重复触发
+                _webSocket.OnClose -= this.OnWsClosed;
+
+                try
+                {
+                    _webSocket.Close(CloseStatusCode.Normal, "close");
+                }
+                catch (Exception ex)
+                {
+                    CrimLogger.ErrorLog("关闭 WebSocket 异常", ex);
+                }
+            }
+
             _setting.State = 0;
             _setting.Started = false;
         }
@@ -650,7 +1070,7 @@ namespace CrimPrintService
             p.Landscape = false;
             p.Paper = "1";
             _setting.Printers.Add(p);
-            
+
             _setting.SelectedID = "new";
         }
 
@@ -678,7 +1098,8 @@ namespace CrimPrintService
                 if (listBoxPrinters.SelectedItem == p)
                 {
                     p.IsDefault = true;
-                } else
+                }
+                else
                 {
                     p.IsDefault = false;
                 }
@@ -732,7 +1153,8 @@ namespace CrimPrintService
             {
                 #region print
                 CrimLogger.InfoLog("print " + command.Seq + "  data:" + command.Data);
-                lock (this) {
+                lock (this)
+                {
 
                     if (command.Type == "image")
                     {
@@ -774,7 +1196,7 @@ namespace CrimPrintService
                             if (PrintQueueMap.ContainsKey(queueName))
                             {
                                 PrintQueue = PrintQueueMap[queueName];
-                            } 
+                            }
                             else
                             {
                                 PrintQueue = new Queue<PrintQueueItem>();
@@ -829,7 +1251,8 @@ namespace CrimPrintService
                 }
                 WsResponse<string> er = new WsResponse<string>();
                 er.Seq = command.Seq;
-                if (hasThePrinter) { 
+                if (hasThePrinter)
+                {
                     er.Data = "OK";
                 }
                 else
@@ -863,7 +1286,8 @@ namespace CrimPrintService
             while (true)
             {
 
-                foreach (string item in PrintQueueMap.Keys) {
+                foreach (string item in PrintQueueMap.Keys)
+                {
                     Console.WriteLine("print queue~:" + item);
                     if (PrintQueueMap[item].Count > 0)
                     {
@@ -943,7 +1367,7 @@ namespace CrimPrintService
             // 开始打印事件
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
-                CrimLogger.InfoLog("print begin" );
+                CrimLogger.InfoLog("print begin");
                 //WsResponse<string> br = new WsResponse<string>();
                 //br.Data = "begin";
                 //Send(JsonConvert.SerializeObject(br));
@@ -1062,9 +1486,9 @@ namespace CrimPrintService
 
         public CustomSetting PrintSetting
         {
-            get;set;
+            get; set;
         }
-        
+
         /// <summary>
         /// 打印
         /// </summary>
@@ -1110,7 +1534,7 @@ namespace CrimPrintService
             // 开始打印事件
             printDoc.BeginPrint += (object sender, PrintEventArgs e) =>
             {
-                CrimLogger.InfoLog("print begin" + seq );
+                CrimLogger.InfoLog("print begin" + seq);
                 WsResponse<string> br = new WsResponse<string>();
                 br.Seq = seq;
                 br.Data = "begin";
@@ -1137,7 +1561,7 @@ namespace CrimPrintService
                 // inch
                 int xr = PageUtils.ToInchX100(printerSetting.MarginRight);
                 int yb = PageUtils.ToInchX100(printerSetting.MarginBottom);
-                
+
                 int w = 300, h = 551;
                 var pagerInch100 = PageUtils.PageToInchX100(printerSetting.Paper);
                 w = pagerInch100.Width;
@@ -1167,9 +1591,11 @@ namespace CrimPrintService
                         rerr.Data = new KeyValuePair<string, string>(image.Key, "error:" + response.StatusCode);
                         string msgerr = JsonConvert.SerializeObject(rerr);
                         Send(msgerr);
-                    } else {
+                    }
+                    else
+                    {
                         using (Stream stream = response.GetResponseStream())
-                        { 
+                        {
                             Image img = Image.FromStream(stream);///实例化,得到img
                             //                Conole.wrimg.Width       img.Height
                             //Console.WriteLine(img.Width + "x" + img.Height);
@@ -1227,9 +1653,9 @@ namespace CrimPrintService
             string msg = JsonConvert.SerializeObject(r);
             Send(msg);
         }
-        
+
         protected void printImage(string seq, string printer, string image)
-        { 
+        {
             List<KeyValuePair<string, string>> imageList = new List<KeyValuePair<string, string>>();
             imageList.Add(new KeyValuePair<string, string>(seq, image));
             printImage(seq, printer, imageList);
@@ -1294,14 +1720,15 @@ namespace CrimPrintService
 
         public string Printer
         {
-            get;set;
+            get; set;
         }
 
         public string Seq { get; set; }
 
         public string Type { get; set; }
 
-        public string Data {
+        public string Data
+        {
             get;
             set;
         }
